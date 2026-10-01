@@ -397,19 +397,22 @@ func schemas() map[string]*Schema {
 		"name":       nullStr("What was eaten. Up to 120 bytes."),
 		"macros":     ref("Macros"),
 		"created_at": dateTime("When the entry was recorded (UTC)."),
-		"local_time": str("`created_at` rendered as HH:MM in the account's time zone."),
+		"eaten_at":   dateTime("When the food was eaten (UTC). Equals `created_at` if no time was given."),
+		"local_time": str("`eaten_at` rendered as HH:MM in the account's time zone."),
 	}
 
 	entryInput := object("A new calorie entry. Supply `calories`, at least one macro, or both.",
 		mergeProps(map[string]*Schema{
-			"date":     dateStr("Defaults to today in the account's time zone."),
+			"date":     dateStr("Defaults to today in the account's time zone, or to the day of `eaten_at`."),
+			"eaten_at": dateTime("When the food was eaten, RFC 3339 with offset. Sets `date` to that day in the account's time zone; if `date` is also sent it must match."),
 			"calories": withRange(integer("Energy in kilocalories."), -9999, 9999),
 			"name":     str("What was eaten."),
 		}, macroInputProps()))
 
 	entryPatch := object("Fields to change. Omit a field to leave it alone; send `null` to clear a macro or the name.",
 		mergeProps(map[string]*Schema{
-			"date":     dateStr("Move the entry to another day."),
+			"date":     dateStr("Move the entry to another day. Clears `eaten_at` unless that is sent too."),
+			"eaten_at": nullable(dateTime("When the food was eaten, RFC 3339 with offset. Also moves `date`. `null` falls back to `created_at`.")),
 			"calories": withRange(integer("Energy in kilocalories. Rejected while the account computes calories from macros."), -9999, 9999),
 			"name":     nullStr("What was eaten. `null` clears it."),
 		}, macroInputProps()))
@@ -432,7 +435,7 @@ func schemas() map[string]*Schema {
 		"Macros": macros,
 
 		"Entry": object("A calorie entry.", entryProps,
-			"id", "date", "calories", "name", "macros", "created_at", "local_time"),
+			"id", "date", "calories", "name", "macros", "created_at", "eaten_at", "local_time"),
 		"EntryInput": entryInput,
 		"EntryPatch": entryPatch,
 		"EntryList": object("A page of entries.", map[string]*Schema{

@@ -462,3 +462,85 @@ func TestV1ProblemBodiesMatchTheDocumentedSchema(t *testing.T) {
 		})
 	}
 }
+
+// eaten_at: an explicit eating time sets the entry's day and local_time;
+// without it the entry falls back to created_at.
+
+func TestV1CreateEntryEatenAt(t *testing.T) {
+	e := newV1Env(t)
+	token := e.token(service.ScopeEntriesWrite)
+
+	got := e.createEntry(token, `{"calories":300,"eaten_at":"2026-08-05T07:30:00Z"}`)
+	if got.Date != "2026-08-05" {
+		t.Errorf("date = %q, want 2026-08-05", got.Date)
+	}
+	if got.LocalTime != "07:30" {
+		t.Errorf("local_time = %q, want 07:30", got.LocalTime)
+	}
+	if got.EatenAt.UTC().Format("2006-01-02T15:04:05Z") != "2026-08-05T07:30:00Z" {
+		t.Errorf("eaten_at = %v", got.EatenAt)
+	}
+
+	plain := e.createEntry(token, `{"calories":100}`)
+	if !plain.EatenAt.Equal(plain.CreatedAt) {
+		t.Errorf("eaten_at = %v, want created_at %v when unset", plain.EatenAt, plain.CreatedAt)
+	}
+}
+
+func TestV1CreateEntryEatenAtValidation(t *testing.T) {
+	e := newV1Env(t)
+	token := e.token(service.ScopeEntriesWrite)
+
+	cases := map[string]struct{ body, param string }{
+		"not rfc3339":       {`{"calories":1,"eaten_at":"yesterday"}`, "eaten_at"},
+		"date mismatch":     {`{"calories":1,"date":"2026-08-04","eaten_at":"2026-08-05T07:30:00Z"}`, "date"},
+		"year out of range": {`{"calories":1,"eaten_at":"0001-01-01T00:00:00Z"}`, "eaten_at"},
+	}
+	for name, c := range cases {
+		t.Run(name, func(t *testing.T) {
+			p := requireProblem(t, e.post("/api/v1/entries", token, c.body), http.StatusUnprocessableEntity)
+			if len(p.InvalidParams) == 0 || p.InvalidParams[0].Name != c.param {
+				t.Errorf("invalid_params = %+v, want first name %q", p.InvalidParams, c.param)
+			}
+		})
+	}
+
+	ok := e.post("/api/v1/entries", token, `{"calories":1,"date":"2026-08-05","eaten_at":"2026-08-05T07:30:00Z"}`)
+	if ok.Code != http.StatusCreated {
+		t.Errorf("matching date + eaten_at: status = %d, want 201", ok.Code)
+	}
+}
+
+func TestV1PatchEntryEatenAt(t *testing.T) {
+	e := newV1Env(t)
+	token := e.token(service.ScopeEntriesWrite)
+	entry := e.createEntry(token, `{"calories":300,"eaten_at":"2026-08-05T07:30:00Z"}`)
+	path := fmt.Sprintf("/api/v1/entries/%d", entry.ID)
+
+	var moved v1Entry
+	rec := e.patch(path, token, `{"eaten_at":"2026-08-06T12:15:00Z"}`)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("PATCH eaten_at: status = %d (body: %s)", rec.Code, rec.Body.String())
+	}
+	decodeJSON(t, rec, &moved)
+	if moved.Date != "2026-08-06" || moved.LocalTime != "12:15" {
+		t.Errorf("after eaten_at patch: date=%q local_time=%q", moved.Date, moved.LocalTime)
+	}
+
+	// A bare date change must not leave eaten_at on the old day.
+	var dayOnly v1Entry
+	rec = e.patch(path, token, `{"date":"2026-08-09"}`)
+	decodeJSON(t, rec, &dayOnly)
+	if dayOnly.Date != "2026-08-09" || !dayOnly.EatenAt.Equal(dayOnly.CreatedAt) {
+		t.Errorf("after date patch: date=%q eaten_at=%v created_at=%v", dayOnly.Date, dayOnly.EatenAt, dayOnly.CreatedAt)
+	}
+
+	// null clears eaten_at back to created_at and keeps the day.
+	e.patch(path, token, `{"eaten_at":"2026-08-10T08:00:00Z"}`)
+	var cleared v1Entry
+	rec = e.patch(path, token, `{"eaten_at":null}`)
+	decodeJSON(t, rec, &cleared)
+	if !cleared.EatenAt.Equal(cleared.CreatedAt) || cleared.Date != "2026-08-10" {
+		t.Errorf("after null: date=%q eaten_at=%v", cleared.Date, cleared.EatenAt)
+	}
+}
