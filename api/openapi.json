@@ -4,7 +4,7 @@
     "title": "Schautrack API",
     "version": "1.0.0",
     "summary": "Read and write your Schautrack calorie, weight, todo, and food data.",
-    "description": "The Schautrack public API.\n\n## Authentication\n\nEvery endpoint except `/openapi.json` and `/docs` requires a\n**personal access token**, sent as a bearer token:\n\n```\nAuthorization: Bearer stk_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx\n```\n\nCreate one under **Settings → API tokens**. The token is shown once and cannot be\nretrieved again. Tokens can be scoped and given an expiry, and can be revoked at\nany time.\n\nSession cookies are **not** accepted here. Because the API never treats a cookie\nas authentication, no cross-site request can carry credentials to it — which is\nwhy there is no CSRF token to manage.\n\n## Scopes\n\nA token carries an explicit set of scopes. A `:write` scope implies the\nmatching `:read`, so `entries:write` alone is enough to both read and\nwrite entries.\n\nCalling an endpoint without its scope returns `403` with a\n`required_scope` field naming what is missing.\n\n## Errors\n\nErrors are [RFC 9457](https://www.rfc-editor.org/rfc/rfc9457) problem details,\nserved as `application/problem+json`:\n\n```json\n{\n  \"type\": \"https://schautrack.com/problems/validation-failed\",\n  \"title\": \"Validation failed\",\n  \"status\": 422,\n  \"detail\": \"One or more macro values are out of range.\",\n  \"instance\": \"/api/v1/entries\",\n  \"invalid_params\": [{ \"name\": \"protein_g\", \"reason\": \"must be between 0 and 999\" }]\n}\n```\n\nBranch on `type`, not on `detail`: the type URI is stable, the prose is not.\n\nThe `type` URIs are **stable identifiers, not endpoints**. Every instance,\nself-hosted ones included, emits the same `https://schautrack.com/problems/…`\nURIs on purpose, so a client can recognise a problem type without knowing which\nhost produced it. Do not dereference them, and do not expect a self-hosted\ninstance to rewrite them to its own domain. This document's `servers` URL,\nby contrast, *is* an endpoint, and always names the instance that served it.\n\n## Dates and time zones\n\nDates are `YYYY-MM-DD` in the **account's** time zone. Omitting a date means\n\"today\" for that account, not for the machine making the request. Timestamps are\nRFC 3339 UTC; each entry also carries `local_time` rendered in the account's\nzone.\n\n## Pagination\n\n`GET /entries` and `GET /weight` are paginated by keyset. Pass the\n`next_cursor` from a response back as `cursor` to fetch the next\npage; stop when `has_more` is false. Cursors are opaque — do not\nconstruct them.\n\n## Retrying safely\n\nEvery `PUT` here is idempotent by construction: the URL names the resource\nand the body states the desired state, so repeating one changes nothing.\n\n`POST` is different. If a request to create an entry times out, you cannot\nknow whether it landed. Send an `Idempotency-Key` header — any string you\ngenerate once per logical operation and reuse when retrying:\n\n```\nIdempotency-Key: 5f8c1e2a-meal-breakfast-2026-08-05\n```\n\nThe first request executes and its response is stored. Any retry with the same\nkey replays that response, with `Idempotency-Replayed: true`, instead of\nlogging the meal twice. Reusing a key with a *different* body returns `409`\nrather than silently discarding the new request. Keys are remembered for 24\nhours. A request that fails releases its key, so the retry is a fresh attempt\nrather than a replay of the error.\n\nEvery endpoint that creates something accepts the header: `POST /entries`,\n`POST /todos`, `POST /saved-foods`, and\n`POST /saved-foods/{id}/track`. The operation parameter lists say which,\nand they are not advisory — the one `POST` that does not honour the header\n(`POST /ai/estimate`) rejects it with `400` instead of ignoring it.\nAn accepted request is therefore always a request whose retry semantics are\nwhat you asked for.\n\n## Rate limits\n\nThree limits apply: one per IP address, one per token, and — on the two\nendpoints that cost real resources — one per account. `POST /ai/estimate`\nand `GET /barcode/{code}` reach a paid provider and a third-party food\ndatabase respectively, so they are capped at the same rate the app's own UI\ngets rather than at the API-wide ceiling; a token is not a cheaper route to\nthem than a browser.\n\nExceeding any of the three returns `429` with a `Retry-After`\nheader giving the number of seconds until the window reopens. Honour it rather\nthan retrying blindly.\n\n| Scope | Grants |\n| --- | --- |\n| `entries:read` | Read calorie entries and their macros. |\n| `entries:write` | Create, update, and delete calorie entries. |\n| `weight:read` | Read weight entries. |\n| `weight:write` | Record and delete weight entries. |\n| `todos:read` | Read todos and their completion state. |\n| `todos:write` | Create, update, delete, and complete todos. |\n| `foods:read` | Read saved foods. |\n| `foods:write` | Create, update, and delete saved foods. |\n| `notes:read` | Read daily notes. |\n| `notes:write` | Write daily notes. |\n| `plan:read` | Read the weight-loss plan, its goal, and its projections. |\n| `links:read` | Read data that linked accounts have shared with you. |\n| `settings:read` | Read account settings (goal, timezone, units, language). |\n| `settings:write` | Change account settings (goal, timezone, units, language). |\n| `ai:estimate` | Estimate nutrition from a food photo. Costs money per call — grant sparingly. |\n",
+    "description": "The Schautrack public API.\n\n## Authentication\n\nEvery endpoint except `/openapi.json` and `/docs` requires a\n**personal access token**, sent as a bearer token:\n\n```\nAuthorization: Bearer stk_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx\n```\n\nCreate one under **Settings → API tokens**. The token is shown once and cannot be\nretrieved again. Tokens can be scoped and given an expiry, and can be revoked at\nany time.\n\nSession cookies are **not** accepted here. Because the API never treats a cookie\nas authentication, no cross-site request can carry credentials to it — which is\nwhy there is no CSRF token to manage.\n\n## Scopes\n\nA token carries an explicit set of scopes. A `:write` scope implies the\nmatching `:read`, so `entries:write` alone is enough to both read and\nwrite entries.\n\nCalling an endpoint without its scope returns `403` with a\n`required_scope` field naming what is missing.\n\n## Errors\n\nErrors are [RFC 9457](https://www.rfc-editor.org/rfc/rfc9457) problem details,\nserved as `application/problem+json`:\n\n```json\n{\n  \"type\": \"https://schautrack.com/problems/validation-failed\",\n  \"title\": \"Validation failed\",\n  \"status\": 422,\n  \"detail\": \"One or more macro values are out of range.\",\n  \"instance\": \"/api/v1/entries\",\n  \"invalid_params\": [{ \"name\": \"protein_g\", \"reason\": \"must be between 0 and 999\" }]\n}\n```\n\nBranch on `type`, not on `detail`: the type URI is stable, the prose is not.\n\nThe `type` URIs are **stable identifiers, not endpoints**. Every instance,\nself-hosted ones included, emits the same `https://schautrack.com/problems/…`\nURIs on purpose, so a client can recognise a problem type without knowing which\nhost produced it. Do not dereference them, and do not expect a self-hosted\ninstance to rewrite them to its own domain. This document's `servers` URL,\nby contrast, *is* an endpoint, and always names the instance that served it.\n\n## Dates and time zones\n\nDates are `YYYY-MM-DD` in the **account's** time zone. Omitting a date means\n\"today\" for that account, not for the machine making the request. Timestamps are\nRFC 3339 UTC; each entry also carries `local_time` rendered in the account's\nzone.\n\n## Pagination\n\n`GET /entries` and `GET /weight` are paginated by keyset. Pass the\n`next_cursor` from a response back as `cursor` to fetch the next\npage; stop when `has_more` is false. Cursors are opaque — do not\nconstruct them.\n\n## Retrying safely\n\nEvery `PUT` here is idempotent by construction: the URL names the resource\nand the body states the desired state, so repeating one changes nothing.\n\n`POST` is different. If a request to create an entry times out, you cannot\nknow whether it landed. Send an `Idempotency-Key` header — any string you\ngenerate once per logical operation and reuse when retrying:\n\n```\nIdempotency-Key: 5f8c1e2a-meal-breakfast-2026-08-05\n```\n\nThe first request executes and its response is stored. Any retry with the same\nkey replays that response, with `Idempotency-Replayed: true`, instead of\nlogging the meal twice. Reusing a key with a *different* body returns `409`\nrather than silently discarding the new request. Keys are remembered for 24\nhours. A request that fails releases its key, so the retry is a fresh attempt\nrather than a replay of the error.\n\nEvery endpoint that creates something accepts the header: `POST /entries`,\n`POST /todos`, `POST /saved-foods`, `POST /foods`, and\n`POST /saved-foods/{id}/track`. The operation parameter lists say which,\nand they are not advisory — the one `POST` that does not honour the header\n(`POST /ai/estimate`) rejects it with `400` instead of ignoring it.\nAn accepted request is therefore always a request whose retry semantics are\nwhat you asked for.\n\n## Rate limits\n\nThree limits apply: one per IP address, one per token, and — on the two\nendpoints that cost real resources — one per account. `POST /ai/estimate`\nand `GET /barcode/{code}` reach a paid provider and a third-party food\ndatabase respectively, so they are capped at the same rate the app's own UI\ngets rather than at the API-wide ceiling; a token is not a cheaper route to\nthem than a browser.\n\nExceeding any of the three returns `429` with a `Retry-After`\nheader giving the number of seconds until the window reopens. Honour it rather\nthan retrying blindly.\n\n| Scope | Grants |\n| --- | --- |\n| `entries:read` | Read calorie entries and their macros. |\n| `entries:write` | Create, update, and delete calorie entries. |\n| `weight:read` | Read weight entries. |\n| `weight:write` | Record and delete weight entries. |\n| `todos:read` | Read todos and their completion state. |\n| `todos:write` | Create, update, delete, and complete todos. |\n| `foods:read` | Read saved foods. |\n| `foods:write` | Create, update, and delete saved foods. |\n| `notes:read` | Read daily notes. |\n| `notes:write` | Write daily notes. |\n| `plan:read` | Read the weight-loss plan, its goal, and its projections. |\n| `links:read` | Read data that linked accounts have shared with you. |\n| `settings:read` | Read account settings (goal, timezone, units, language). |\n| `settings:write` | Change account settings (goal, timezone, units, language). |\n| `ai:estimate` | Estimate nutrition from a food photo. Costs money per call — grant sparingly. |\n",
     "license": {
       "name": "AGPL-3.0-or-later",
       "identifier": "AGPL-3.0-or-later"
@@ -40,6 +40,10 @@
     {
       "name": "Saved foods",
       "description": "Reusable quick-add foods."
+    },
+    {
+      "name": "Foods",
+      "description": "The searchable food catalog, with nutrients per 100 g."
     },
     {
       "name": "Notes",
@@ -1004,6 +1008,270 @@
           {
             "bearerAuth": [
               "entries:write"
+            ]
+          }
+        ]
+      }
+    },
+    "/foods": {
+      "post": {
+        "operationId": "createFood",
+        "summary": "Create a food of your own",
+        "description": "Adds a food with values from, say, a package label. Only on request: estimates belong in an ad-hoc component, not in the catalog.",
+        "tags": [
+          "Foods"
+        ],
+        "parameters": [
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "description": "Optional. A key you generate once per logical operation and reuse when retrying. The first request executes and its response is stored; a retry with the same key replays that response instead of creating a second record, and carries `Idempotency-Replayed: true`. Reusing a key for a different request body is rejected with 409. Keys are remembered for 24 hours.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/FoodInput"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "The created food.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Food"
+                }
+              }
+            },
+            "headers": {
+              "Idempotency-Replayed": {
+                "description": "Present and `true` only on a replayed response — the request matched a stored Idempotency-Key and nothing new was created. Absent on the first request. This is the only way to distinguish a replay from a fresh create, since a replay repeats the original status code.",
+                "schema": {
+                  "type": "boolean"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "The request is malformed — unparseable JSON, an unknown field, or a bad query parameter.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No token, or the token is unknown, revoked, or expired.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "The token is valid but lacks the scope this endpoint requires. The `required_scope` field names it.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "The request collides with existing state — a duplicate name, a limit already reached, or a feature not enabled.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "The request body exceeds the 1 MB limit. Attached to every operation that takes a body — the cap is enforced in the decoder, not per endpoint.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "The request is well-formed but its values are rejected. `invalid_params` lists the offending fields.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Too many requests. The `Retry-After` header gives the number of seconds until the window reopens.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "headers": {
+              "Retry-After": {
+                "description": "Seconds to wait before retrying.",
+                "schema": {
+                  "type": "integer"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "An unexpected server-side failure.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": [
+              "foods:write"
+            ]
+          }
+        ]
+      }
+    },
+    "/foods/search": {
+      "get": {
+        "operationId": "searchFoods",
+        "summary": "Search the food catalog",
+        "description": "Searches the shared catalog and your own foods by name. Typos still match. Exact names rank first, then names starting with the query, then the closest matches. Not paginated: narrow the query instead.",
+        "tags": [
+          "Foods"
+        ],
+        "parameters": [
+          {
+            "name": "q",
+            "in": "query",
+            "description": "The search text, at least 2 characters.",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "description": "Maximum results to return. Values above 50 are clamped to 50.",
+            "schema": {
+              "type": "integer",
+              "default": 50,
+              "minimum": 1,
+              "maximum": 50
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The matching foods.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FoodList"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "The request is malformed — unparseable JSON, an unknown field, or a bad query parameter.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No token, or the token is unknown, revoked, or expired.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "The token is valid but lacks the scope this endpoint requires. The `required_scope` field names it.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "The request is well-formed but its values are rejected. `invalid_params` lists the offending fields.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Too many requests. The `Retry-After` header gives the number of seconds until the window reopens.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "headers": {
+              "Retry-After": {
+                "description": "Seconds to wait before retrying.",
+                "schema": {
+                  "type": "integer"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "An unexpected server-side failure.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": [
+              "foods:read"
             ]
           }
         ]
@@ -3883,6 +4151,197 @@
         },
         "required": [
           "image"
+        ]
+      },
+      "Food": {
+        "type": "object",
+        "description": "A catalog food. All nutrients are per 100 g.",
+        "properties": {
+          "calories_per_100g": {
+            "type": [
+              "number",
+              "null"
+            ],
+            "description": "Energy per 100 g, kilocalories. `null` means unknown."
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "description": "When it was added to the catalog (UTC)."
+          },
+          "id": {
+            "type": "integer",
+            "description": "Server-assigned identifier."
+          },
+          "macros_per_100g": {
+            "$ref": "#/components/schemas/FoodMacros"
+          },
+          "name": {
+            "type": "string",
+            "description": "Food name."
+          },
+          "source": {
+            "type": "string",
+            "description": "Where the food comes from: the BLS, Open Food Facts, or created by the account.",
+            "enum": [
+              "bls",
+              "off",
+              "own"
+            ]
+          },
+          "source_classification": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "The source's own classification, kept as delivered: the BLS code or the Open Food Facts categories."
+          },
+          "source_code": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "The source's own code: the BLS code or the EAN. `null` for own foods."
+          }
+        },
+        "required": [
+          "id",
+          "source",
+          "source_code",
+          "name",
+          "source_classification",
+          "calories_per_100g",
+          "macros_per_100g",
+          "created_at"
+        ]
+      },
+      "FoodInput": {
+        "type": "object",
+        "description": "A new food of your own, with values per 100 g.",
+        "properties": {
+          "calories_per_100g": {
+            "type": "number",
+            "description": "Energy per 100 g, kilocalories.",
+            "minimum": 0,
+            "maximum": 1000
+          },
+          "carbs_g": {
+            "type": [
+              "number",
+              "null"
+            ],
+            "description": "Carbohydrates, grams per 100 g.",
+            "minimum": 0,
+            "maximum": 100
+          },
+          "fat_g": {
+            "type": [
+              "number",
+              "null"
+            ],
+            "description": "Fat, grams per 100 g.",
+            "minimum": 0,
+            "maximum": 100
+          },
+          "fiber_g": {
+            "type": [
+              "number",
+              "null"
+            ],
+            "description": "Fibre, grams per 100 g.",
+            "minimum": 0,
+            "maximum": 100
+          },
+          "name": {
+            "type": "string",
+            "description": "Food name. Unique per account, case-insensitively."
+          },
+          "protein_g": {
+            "type": [
+              "number",
+              "null"
+            ],
+            "description": "Protein, grams per 100 g.",
+            "minimum": 0,
+            "maximum": 100
+          },
+          "sugar_g": {
+            "type": [
+              "number",
+              "null"
+            ],
+            "description": "Sugar, grams per 100 g.",
+            "minimum": 0,
+            "maximum": 100
+          }
+        },
+        "required": [
+          "name",
+          "calories_per_100g"
+        ]
+      },
+      "FoodList": {
+        "type": "object",
+        "description": "Matching foods, best match first.",
+        "properties": {
+          "data": {
+            "type": "array",
+            "description": "The matches.",
+            "items": {
+              "$ref": "#/components/schemas/Food"
+            }
+          }
+        },
+        "required": [
+          "data"
+        ]
+      },
+      "FoodMacros": {
+        "type": "object",
+        "description": "Macronutrients in grams per 100 g. `null` means unknown, which is distinct from zero.",
+        "properties": {
+          "carbs_g": {
+            "type": [
+              "number",
+              "null"
+            ],
+            "description": "Carbohydrates, grams."
+          },
+          "fat_g": {
+            "type": [
+              "number",
+              "null"
+            ],
+            "description": "Fat, grams."
+          },
+          "fiber_g": {
+            "type": [
+              "number",
+              "null"
+            ],
+            "description": "Fibre, grams."
+          },
+          "protein_g": {
+            "type": [
+              "number",
+              "null"
+            ],
+            "description": "Protein, grams."
+          },
+          "sugar_g": {
+            "type": [
+              "number",
+              "null"
+            ],
+            "description": "Sugar, grams."
+          }
+        },
+        "required": [
+          "protein_g",
+          "carbs_g",
+          "fat_g",
+          "fiber_g",
+          "sugar_g"
         ]
       },
       "HealthyRange": {

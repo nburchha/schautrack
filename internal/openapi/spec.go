@@ -137,7 +137,7 @@ hours. A request that fails releases its key, so the retry is a fresh attempt
 rather than a replay of the error.
 
 Every endpoint that creates something accepts the header: ` + "`POST /entries`" + `,
-` + "`POST /todos`" + `, ` + "`POST /saved-foods`" + `, and
+` + "`POST /todos`" + `, ` + "`POST /saved-foods`" + `, ` + "`POST /foods`" + `, and
 ` + "`POST /saved-foods/{id}/track`" + `. The operation parameter lists say which,
 and they are not advisory — the one ` + "`POST`" + ` that does not honour the header
 (` + "`POST /ai/estimate`" + `) rejects it with ` + "`400`" + ` instead of ignoring it.
@@ -214,6 +214,7 @@ func Build(version, baseURL string) *Document {
 			{Name: "Weight", Description: "Daily weight readings."},
 			{Name: "Todos", Description: "Recurring todos and their completions."},
 			{Name: "Saved foods", Description: "Reusable quick-add foods."},
+			{Name: "Foods", Description: "The searchable food catalog, with nutrients per 100 g."},
 			{Name: "Notes", Description: "One free-text note per day."},
 			{Name: "Plan", Description: "The weight-loss plan and its projections."},
 			{Name: "Links", Description: "Accounts that share data with you."},
@@ -524,6 +525,37 @@ func schemas() map[string]*Schema {
 				"emoji":    nullStr("`null` clears the emoji."),
 				"calories": withRange(nullInt("Energy per unit."), -9999, 9999),
 			}, macroInputProps())),
+		"FoodMacros": object("Macronutrients in grams per 100 g. `null` means unknown, which is distinct from zero.",
+			map[string]*Schema{
+				"protein_g": nullable(number("Protein, grams.")),
+				"carbs_g":   nullable(number("Carbohydrates, grams.")),
+				"fat_g":     nullable(number("Fat, grams.")),
+				"fiber_g":   nullable(number("Fibre, grams.")),
+				"sugar_g":   nullable(number("Sugar, grams.")),
+			}, "protein_g", "carbs_g", "fat_g", "fiber_g", "sugar_g"),
+		"Food": object("A catalog food. All nutrients are per 100 g.", map[string]*Schema{
+			"id": integer("Server-assigned identifier."),
+			"source": {Type: "string", Enum: []any{"bls", "off", "own"},
+				Description: "Where the food comes from: the BLS, Open Food Facts, or created by the account."},
+			"source_code":           nullStr("The source's own code: the BLS code or the EAN. `null` for own foods."),
+			"name":                  str("Food name."),
+			"source_classification": nullStr("The source's own classification, kept as delivered: the BLS code or the Open Food Facts categories."),
+			"calories_per_100g":     nullable(number("Energy per 100 g, kilocalories. `null` means unknown.")),
+			"macros_per_100g":       ref("FoodMacros"),
+			"created_at":            dateTime("When it was added to the catalog (UTC)."),
+		}, "id", "source", "source_code", "name", "source_classification", "calories_per_100g", "macros_per_100g", "created_at"),
+		"FoodInput": object("A new food of your own, with values per 100 g.", map[string]*Schema{
+			"name":              str("Food name. Unique per account, case-insensitively."),
+			"calories_per_100g": withRange(number("Energy per 100 g, kilocalories."), 0, 1000),
+			"protein_g":         withRange(nullable(number("Protein, grams per 100 g.")), 0, 100),
+			"carbs_g":           withRange(nullable(number("Carbohydrates, grams per 100 g.")), 0, 100),
+			"fat_g":             withRange(nullable(number("Fat, grams per 100 g.")), 0, 100),
+			"fiber_g":           withRange(nullable(number("Fibre, grams per 100 g.")), 0, 100),
+			"sugar_g":           withRange(nullable(number("Sugar, grams per 100 g.")), 0, 100),
+		}, "name", "calories_per_100g"),
+		"FoodList": object("Matching foods, best match first.", map[string]*Schema{
+			"data": array(ref("Food"), "The matches."),
+		}, "data"),
 		"SavedFoodList": object("Saved foods, most-used first. Never partial.", map[string]*Schema{
 			"data": array(ref("SavedFood"), "Every saved food on the account."),
 		}, "data"),
@@ -855,6 +887,11 @@ func ok200(desc string, s *Schema) *Response {
 	return &Response{Description: desc, Content: jsonBody(s)}
 }
 
+// ok201 is a creation response for a resource with no URL of its own.
+func ok201(desc string, s *Schema) *Response {
+	return &Response{Description: desc, Content: jsonBody(s)}
+}
+
 // created201 is a creation response with a Location header.
 func created201(desc string, s *Schema, location string) *Response {
 	return &Response{
@@ -1144,6 +1181,41 @@ func paths() map[string]*PathItem {
 			Responses: merge(map[string]*Response{
 				"200": ok200("The resulting completion state.", ref("Completion")),
 				"400": respRef("BadRequest"), "404": respRef("NotFound"),
+			}, errs(nil)),
+		}},
+
+		"/foods/search": {Get: &Operation{
+			OperationID: "searchFoods", Summary: "Search the food catalog",
+			Description: "Searches the shared catalog and your own foods by name. Typos still match. " +
+				"Exact names rank first, then names starting with the query, then the closest matches. " +
+				"Not paginated: narrow the query instead.",
+			Tags: []string{"Foods"}, Scope: service.ScopeFoodsRead,
+			Security: []SecurityRequirement{{"bearerAuth": {service.ScopeFoodsRead}}},
+			Parameters: []Parameter{
+				{Name: "q", In: "query", Required: true,
+					Description: "The search text, at least 2 characters.", Schema: str("")},
+				{Name: "limit", In: "query",
+					Description: "Maximum results to return. Values above 50 are clamped to 50.",
+					Schema:      withRange(&Schema{Type: "integer", Default: 50}, 1, 50)},
+			},
+			Responses: merge(map[string]*Response{
+				"200": ok200("The matching foods.", ref("FoodList")),
+				"400": respRef("BadRequest"), "422": respRef("Unprocessable"),
+			}, errs(nil)),
+		}},
+
+		"/foods": {Post: &Operation{
+			OperationID: "createFood", Summary: "Create a food of your own",
+			Description: "Adds a food with values from, say, a package label. Only on request: " +
+				"estimates belong in an ad-hoc component, not in the catalog.",
+			Tags: []string{"Foods"}, Scope: service.ScopeFoodsWrite,
+			Security:    []SecurityRequirement{{"bearerAuth": {service.ScopeFoodsWrite}}},
+			Parameters:  []Parameter{idempotencyParam},
+			RequestBody: &RequestBody{Required: true, Content: jsonBody(ref("FoodInput"))},
+			Responses: merge(map[string]*Response{
+				"201": ok201("The created food.", ref("Food")),
+				"400": respRef("BadRequest"), "409": respRef("Conflict"),
+				"422": respRef("Unprocessable"),
 			}, errs(nil)),
 		}},
 
