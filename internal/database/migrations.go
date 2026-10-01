@@ -134,7 +134,8 @@ func ensureCalorieEntriesSchema(ctx context.Context, pool *pgxpool.Pool) error {
 		_, err := tx.Exec(ctx, `
 			ALTER TABLE calorie_entries
 				ADD COLUMN IF NOT EXISTS entry_name TEXT,
-				ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ NOT NULL DEFAULT now();
+				ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+				ADD COLUMN IF NOT EXISTS eaten_at TIMESTAMPTZ;
 			CREATE INDEX IF NOT EXISTS calorie_entries_user_date_idx ON calorie_entries (user_id, entry_date);
 			DO $$ BEGIN
 				ALTER TABLE calorie_entries ADD CONSTRAINT calorie_entries_amount_range CHECK (amount >= -9999 AND amount <= 9999);

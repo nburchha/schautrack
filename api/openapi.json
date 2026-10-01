@@ -3936,13 +3936,18 @@
             "pattern": "^\\d{4}-\\d{2}-\\d{2}$",
             "example": "2026-08-05"
           },
+          "eaten_at": {
+            "type": "string",
+            "format": "date-time",
+            "description": "When the food was eaten (UTC). Equals `created_at` if no time was given."
+          },
           "id": {
             "type": "integer",
             "description": "Server-assigned identifier."
           },
           "local_time": {
             "type": "string",
-            "description": "`created_at` rendered as HH:MM in the account's time zone."
+            "description": "`eaten_at` rendered as HH:MM in the account's time zone."
           },
           "macros": {
             "$ref": "#/components/schemas/Macros"
@@ -3962,6 +3967,7 @@
           "name",
           "macros",
           "created_at",
+          "eaten_at",
           "local_time"
         ]
       },
@@ -3987,9 +3993,14 @@
           "date": {
             "type": "string",
             "format": "date",
-            "description": "Defaults to today in the account's time zone.",
+            "description": "Defaults to today in the account's time zone, or to the day of `eaten_at`.",
             "pattern": "^\\d{4}-\\d{2}-\\d{2}$",
             "example": "2026-08-05"
+          },
+          "eaten_at": {
+            "type": "string",
+            "format": "date-time",
+            "description": "When the food was eaten, RFC 3339 with offset. Sets `date` to that day in the account's time zone; if `date` is also sent it must match."
           },
           "fat_g": {
             "type": [
@@ -4082,9 +4093,17 @@
           "date": {
             "type": "string",
             "format": "date",
-            "description": "Move the entry to another day.",
+            "description": "Move the entry to another day. Clears `eaten_at` unless that is sent too.",
             "pattern": "^\\d{4}-\\d{2}-\\d{2}$",
             "example": "2026-08-05"
+          },
+          "eaten_at": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time",
+            "description": "When the food was eaten, RFC 3339 with offset. Also moves `date`. `null` falls back to `created_at`."
           },
           "fat_g": {
             "type": [
