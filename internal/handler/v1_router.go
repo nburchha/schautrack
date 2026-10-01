@@ -160,6 +160,9 @@ func (h *V1Handler) MountAPIV1(pool *pgxpool.Pool) chi.Router {
 			r.With(middleware.RequireScope(service.ScopeEntriesRead)).Get("/{id}", h.GetEntryV1)
 			r.With(middleware.RequireScope(service.ScopeEntriesWrite)).Patch("/{id}", h.UpdateEntryV1)
 			r.With(middleware.RequireScope(service.ScopeEntriesWrite)).Delete("/{id}", h.DeleteEntryV1)
+			r.With(middleware.RequireScope(service.ScopeEntriesWrite)).Post("/{id}/components", h.withIdempotency(h.AddComponentV1))
+			r.With(middleware.RequireScope(service.ScopeEntriesWrite)).Patch("/{id}/components/{cid}", h.UpdateComponentV1)
+			r.With(middleware.RequireScope(service.ScopeEntriesWrite)).Delete("/{id}/components/{cid}", h.DeleteComponentV1)
 		})
 
 		// Weight is keyed by date, not by surrogate id: there is exactly one

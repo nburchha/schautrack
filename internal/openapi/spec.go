@@ -137,7 +137,8 @@ hours. A request that fails releases its key, so the retry is a fresh attempt
 rather than a replay of the error.
 
 Every endpoint that creates something accepts the header: ` + "`POST /entries`" + `,
-` + "`POST /todos`" + `, ` + "`POST /saved-foods`" + `, ` + "`POST /foods`" + `, and
+` + "`POST /todos`" + `, ` + "`POST /saved-foods`" + `, ` + "`POST /foods`" + `,
+` + "`POST /entries/{id}/components`" + `, and
 ` + "`POST /saved-foods/{id}/track`" + `. The operation parameter lists say which,
 and they are not advisory — the one ` + "`POST`" + ` that does not honour the header
 (` + "`POST /ai/estimate`" + `) rejects it with ` + "`400`" + ` instead of ignoring it.
@@ -400,6 +401,7 @@ func schemas() map[string]*Schema {
 		"created_at": dateTime("When the entry was recorded (UTC)."),
 		"eaten_at":   dateTime("When the food was eaten (UTC). Equals `created_at` if no time was given."),
 		"local_time": str("`eaten_at` rendered as HH:MM in the account's time zone."),
+		"components": array(ref("Component"), "The entry's ingredients. Empty for a direct entry. When there are any, `calories` and `macros` are their sum."),
 	}
 
 	entryInput := object("A new calorie entry. Supply `calories`, at least one macro, or both.",
@@ -408,9 +410,12 @@ func schemas() map[string]*Schema {
 			"eaten_at": dateTime("When the food was eaten, RFC 3339 with offset. Sets `date` to that day in the account's time zone; if `date` is also sent it must match."),
 			"calories": withRange(integer("Energy in kilocalories."), -9999, 9999),
 			"name":     str("What was eaten."),
+			"components": array(ref("ComponentInput"),
+				"Ingredients. Then `calories` and the macros are computed from them and must be left out."),
 		}, macroInputProps()))
 
-	entryPatch := object("Fields to change. Omit a field to leave it alone; send `null` to clear a macro or the name.",
+	entryPatch := object("Fields to change. Omit a field to leave it alone; send `null` to clear a macro or the name. "+
+		"Setting `calories` or a macro on an entry with components works, but the next change to a component overwrites it with the sum.",
 		mergeProps(map[string]*Schema{
 			"date":     dateStr("Move the entry to another day. Clears `eaten_at` unless that is sent too."),
 			"eaten_at": nullable(dateTime("When the food was eaten, RFC 3339 with offset. Also moves `date`. `null` falls back to `created_at`.")),
@@ -436,7 +441,7 @@ func schemas() map[string]*Schema {
 		"Macros": macros,
 
 		"Entry": object("A calorie entry.", entryProps,
-			"id", "date", "calories", "name", "macros", "created_at", "eaten_at", "local_time"),
+			"id", "date", "calories", "name", "macros", "created_at", "eaten_at", "local_time", "components"),
 		"EntryInput": entryInput,
 		"EntryPatch": entryPatch,
 		"EntryList": object("A page of entries.", map[string]*Schema{
@@ -528,6 +533,28 @@ func schemas() map[string]*Schema {
 				"emoji":    nullStr("`null` clears the emoji."),
 				"calories": withRange(nullInt("Energy per unit."), -9999, 9999),
 			}, macroInputProps())),
+		"Component": object("One ingredient of an entry: a snapshot of a food, in grams. The values per 100 g are copied when it is added and never change.", map[string]*Schema{
+			"id":                integer("Server-assigned identifier."),
+			"food_id":           nullable(integer("The catalog food it was taken from. `null` for an ad-hoc component, or once that food is deleted.")),
+			"name":              str("Name at capture time."),
+			"grams":             number("Amount in grams. May be an estimate."),
+			"calories_per_100g": number("Energy per 100 g, kilocalories."),
+			"macros_per_100g":   ref("FoodMacros"),
+		}, "id", "food_id", "name", "grams", "calories_per_100g", "macros_per_100g"),
+		"ComponentInput": object("A component to add. Either `food_id` and `grams` (the server copies the food's values), or an ad-hoc component with `name`, `grams` and `calories_per_100g`. Not both.", map[string]*Schema{
+			"food_id":           integer("A catalog food: a shared one or one of your own. It needs a calorie value."),
+			"grams":             withRange(number("Amount in grams."), 0, 10000),
+			"name":              str("Ad-hoc component name."),
+			"calories_per_100g": withRange(number("Ad-hoc energy per 100 g, kilocalories."), 0, 1000),
+			"protein_g":         withRange(nullable(number("Ad-hoc protein, grams per 100 g.")), 0, 100),
+			"carbs_g":           withRange(nullable(number("Ad-hoc carbohydrates, grams per 100 g.")), 0, 100),
+			"fat_g":             withRange(nullable(number("Ad-hoc fat, grams per 100 g.")), 0, 100),
+			"fiber_g":           withRange(nullable(number("Ad-hoc fibre, grams per 100 g.")), 0, 100),
+			"sugar_g":           withRange(nullable(number("Ad-hoc sugar, grams per 100 g.")), 0, 100),
+		}, "grams"),
+		"ComponentPatch": object("The component's new amount.", map[string]*Schema{
+			"grams": withRange(number("Amount in grams."), 0, 10000),
+		}, "grams"),
 		"FoodMacros": object("Macronutrients in grams per 100 g. `null` means unknown, which is distinct from zero.",
 			map[string]*Schema{
 				"protein_g": nullable(number("Protein, grams.")),
@@ -919,6 +946,11 @@ func paths() map[string]*PathItem {
 		Description: "The resource's identifier.",
 		Schema:      integer(""),
 	}
+	componentIDParam := Parameter{
+		Name: "cid", In: "path", Required: true,
+		Description: "The component's identifier.",
+		Schema:      integer(""),
+	}
 	limitParam := Parameter{
 		Name: "limit", In: "query",
 		Description: "Maximum results to return. Values above 200 are clamped to 200.",
@@ -1052,6 +1084,52 @@ func paths() map[string]*PathItem {
 				Parameters: []Parameter{idParam},
 				Responses: merge(map[string]*Response{
 					"204": noContent204, "400": respRef("BadRequest"), "404": respRef("NotFound"),
+				}, errs(nil)),
+			},
+		},
+
+		"/entries/{id}/components": {Post: &Operation{
+			OperationID: "addComponent", Summary: "Add a component to an entry",
+			Description: "The entry's calories and macros become the sum of its components: " +
+				"grams / 100 × value per 100 g, rounded to whole units. A value that is unknown " +
+				"(`null`) is left out of the sum, and a macro no component knows stays `null`. " +
+				"Adding a component to a direct entry replaces its stored values with that sum. " +
+				"At most 50 components per entry.",
+			Tags: []string{"Entries"}, Scope: service.ScopeEntriesWrite,
+			Security:    []SecurityRequirement{{"bearerAuth": {service.ScopeEntriesWrite}}},
+			Parameters:  []Parameter{idParam, idempotencyParam},
+			RequestBody: &RequestBody{Required: true, Content: jsonBody(ref("ComponentInput"))},
+			Responses: merge(map[string]*Response{
+				"201": ok201("The updated entry, with its new totals.", ref("Entry")),
+				"400": respRef("BadRequest"), "404": respRef("NotFound"),
+				"409": respRef("Conflict"), "422": respRef("Unprocessable"),
+			}, errs(nil)),
+		}},
+		"/entries/{id}/components/{cid}": {
+			Patch: &Operation{
+				OperationID: "updateComponent", Summary: "Change a component's amount",
+				Description: "Only `grams` can change. The values per 100 g stay as captured. " +
+					"The entry's totals are recomputed.",
+				Tags: []string{"Entries"}, Scope: service.ScopeEntriesWrite,
+				Security:    []SecurityRequirement{{"bearerAuth": {service.ScopeEntriesWrite}}},
+				Parameters:  []Parameter{idParam, componentIDParam},
+				RequestBody: &RequestBody{Required: true, Content: jsonBody(ref("ComponentPatch"))},
+				Responses: merge(map[string]*Response{
+					"200": ok200("The updated entry, with its new totals.", ref("Entry")),
+					"400": respRef("BadRequest"), "404": respRef("NotFound"),
+					"422": respRef("Unprocessable"),
+				}, errs(nil)),
+			},
+			Delete: &Operation{
+				OperationID: "deleteComponent", Summary: "Remove a component",
+				Description: "Returns the updated entry. Removing the last component keeps the " +
+					"last computed totals, so the entry becomes a direct entry.",
+				Tags: []string{"Entries"}, Scope: service.ScopeEntriesWrite,
+				Security:   []SecurityRequirement{{"bearerAuth": {service.ScopeEntriesWrite}}},
+				Parameters: []Parameter{idParam, componentIDParam},
+				Responses: merge(map[string]*Response{
+					"200": ok200("The updated entry.", ref("Entry")),
+					"400": respRef("BadRequest"), "404": respRef("NotFound"),
 				}, errs(nil)),
 			},
 		},
