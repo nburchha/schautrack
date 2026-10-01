@@ -19,6 +19,9 @@ import (
 const (
 	maxComponentsPerEntry = 50
 	maxComponentGrams     = 10000.0
+	// minComponentGrams is the smallest value NUMERIC(8,2) can hold; anything
+	// below rounds to 0 and would trip the grams > 0 CHECK.
+	minComponentGrams = 0.01
 )
 
 // v1Component is one ingredient of an entry: a snapshot of a food, in grams.
@@ -113,13 +116,15 @@ func invalid(prefix, field, reason string) *apierr.Problem {
 		apierr.InvalidParam{Name: prefix + field, Reason: reason})
 }
 
-func validGrams(g *float64) bool { return g != nil && *g > 0 && *g <= maxComponentGrams }
+func validGrams(g *float64) bool {
+	return g != nil && *g >= minComponentGrams && *g <= maxComponentGrams
+}
 
 // resolveComponent validates one input and, for a catalog food, snapshots the
 // food's values. prefix names the field in errors, e.g. "components[2].".
 func resolveComponent(ctx context.Context, q querier, userID int, in v1ComponentInput, prefix string) (*resolvedComponent, *apierr.Problem) {
 	if !validGrams(in.Grams) {
-		return nil, invalid(prefix, "grams", fmt.Sprintf("required, greater than 0 and at most %g", maxComponentGrams))
+		return nil, invalid(prefix, "grams", fmt.Sprintf("required, between %g and %g", minComponentGrams, maxComponentGrams))
 	}
 	rc := &resolvedComponent{grams: *in.Grams}
 
@@ -391,7 +396,7 @@ func (h *V1Handler) UpdateComponentV1(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if !validGrams(in.Grams) {
-		apierr.Write(w, r, invalid("", "grams", fmt.Sprintf("required, greater than 0 and at most %g", maxComponentGrams)))
+		apierr.Write(w, r, invalid("", "grams", fmt.Sprintf("required, between %g and %g", minComponentGrams, maxComponentGrams)))
 		return
 	}
 	tx, entryID, locked := h.lockEntry(w, r)

@@ -543,7 +543,7 @@ func schemas() map[string]*Schema {
 		}, "id", "food_id", "name", "grams", "calories_per_100g", "macros_per_100g"),
 		"ComponentInput": object("A component to add. Either `food_id` and `grams` (the server copies the food's values), or an ad-hoc component with `name`, `grams` and `calories_per_100g`. Not both.", map[string]*Schema{
 			"food_id":           integer("A catalog food: a shared one or one of your own. It needs a calorie value."),
-			"grams":             withRange(number("Amount in grams."), 0, 10000),
+			"grams":             withRange(number("Amount in grams."), 0.01, 10000),
 			"name":              str("Ad-hoc component name."),
 			"calories_per_100g": withRange(number("Ad-hoc energy per 100 g, kilocalories."), 0, 1000),
 			"protein_g":         withRange(nullable(number("Ad-hoc protein, grams per 100 g.")), 0, 100),
@@ -553,7 +553,7 @@ func schemas() map[string]*Schema {
 			"sugar_g":           withRange(nullable(number("Ad-hoc sugar, grams per 100 g.")), 0, 100),
 		}, "grams"),
 		"ComponentPatch": object("The component's new amount.", map[string]*Schema{
-			"grams": withRange(number("Amount in grams."), 0, 10000),
+			"grams": withRange(number("Amount in grams."), 0.01, 10000),
 		}, "grams"),
 		"FoodMacros": object("Macronutrients in grams per 100 g. `null` means unknown, which is distinct from zero.",
 			map[string]*Schema{

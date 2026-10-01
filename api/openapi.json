@@ -4408,7 +4408,7 @@
           "grams": {
             "type": "number",
             "description": "Amount in grams.",
-            "minimum": 0,
+            "minimum": 0.01,
             "maximum": 10000
           },
           "name": {
@@ -4445,7 +4445,7 @@
           "grams": {
             "type": "number",
             "description": "Amount in grams.",
-            "minimum": 0,
+            "minimum": 0.01,
             "maximum": 10000
           }
         },

@@ -148,6 +148,7 @@ func TestV1ComponentValidation(t *testing.T) {
 	cases := map[string]struct{ body, param string }{
 		"with calories":      {`{"calories":5,"components":[{"name":"a","grams":1,"calories_per_100g":1}]}`, "components"},
 		"no grams":           {`{"components":[{"name":"a","calories_per_100g":1}]}`, "components[0].grams"},
+		"grams below 0.01":   {`{"components":[{"name":"a","grams":0.00001,"calories_per_100g":1}]}`, "components[0].grams"},
 		"zero grams":         {`{"components":[{"name":"a","grams":0,"calories_per_100g":1}]}`, "components[0].grams"},
 		"food and adhoc":     {`{"components":[{"food_id":1,"name":"a","grams":1}]}`, "components[0].food_id"},
 		"unknown food":       {`{"components":[{"food_id":2000000000,"grams":1}]}`, "components[0].food_id"},
