@@ -164,6 +164,7 @@ func TestV1MalformedPathParametersAreNeverA500(t *testing.T) {
 
 	bad := map[string][]string{
 		"{id}":   {"not-an-int", "0", "-1", "9999999999999999999999"},
+		"{cid}":  {"not-an-int", "0", "-1", "9999999999999999999999"},
 		"{date}": {"not-a-date", "2026-02-31", "2026-13-01", "2026-1-1", "0001-01-01"},
 	}
 
