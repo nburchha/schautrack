@@ -71,6 +71,11 @@ func likeEscape(s string) string {
 // own foods, then to shorter names.
 func (h *V1Handler) SearchFoodsV1(w http.ResponseWriter, r *http.Request) {
 	q := strings.TrimSpace(r.URL.Query().Get("q"))
+	if strings.ContainsRune(q, 0) {
+		// Postgres TEXT cannot hold NUL; refuse it here, as decodeV1 does for bodies.
+		apierr.Write(w, r, apierr.BadRequest("Text fields cannot contain NUL characters."))
+		return
+	}
 	if len([]rune(q)) < minSearchQuery {
 		apierr.Write(w, r, apierr.Unprocessable(
 			fmt.Sprintf(`"q" needs at least %d characters.`, minSearchQuery),

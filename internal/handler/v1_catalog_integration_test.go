@@ -166,3 +166,9 @@ func TestV1FoodsRequireScopes(t *testing.T) {
 		t.Errorf("create without foods:write: status = %d, want 403", rec.Code)
 	}
 }
+
+func TestV1FoodSearchRejectsNUL(t *testing.T) {
+	e := newV1Env(t)
+	rec := e.get("/api/v1/foods/search?q=ab%00cd", e.token(service.ScopeFoodsRead))
+	requireProblem(t, rec, http.StatusBadRequest)
+}
