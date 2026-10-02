@@ -612,6 +612,66 @@ func ensurePasskeysSchema(ctx context.Context, pool *pgxpool.Pool) error {
 	})
 }
 
+// ensureFoodCatalogSchema creates the searchable food catalog.
+//
+// Rows from bls/off are global (user_id NULL); own foods belong to one user.
+// Nutrient values are per 100 g, and NULL means unknown, never 0.
+func ensureFoodCatalogSchema(ctx context.Context, pool *pgxpool.Pool) error {
+	return withTransaction(ctx, pool, func(tx pgx.Tx) error {
+		if _, err := tx.Exec(ctx, `CREATE EXTENSION IF NOT EXISTS pg_trgm`); err != nil {
+			return err
+		}
+		if _, err := tx.Exec(ctx, `
+			CREATE TABLE IF NOT EXISTS foods (
+				id SERIAL PRIMARY KEY,
+				user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
+				source TEXT NOT NULL,
+				source_code TEXT,
+				name TEXT NOT NULL,
+				source_classification TEXT,
+				kcal_100g NUMERIC(7,2),
+				protein_100g NUMERIC(7,2),
+				carbs_100g NUMERIC(7,2),
+				fat_100g NUMERIC(7,2),
+				fiber_100g NUMERIC(7,2),
+				sugar_100g NUMERIC(7,2),
+				created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+				updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+			)`); err != nil {
+			return err
+		}
+
+		checks := []struct{ name, expr string }{
+			{"foods_source", "source IN ('bls', 'off', 'own')"},
+			{"foods_owner", "(source = 'own') = (user_id IS NOT NULL)"},
+			{"foods_source_code", "source = 'own' OR source_code IS NOT NULL"},
+			{"foods_kcal_range", "kcal_100g IS NULL OR (kcal_100g >= 0 AND kcal_100g <= 1000)"},
+			{"foods_protein_range", "protein_100g IS NULL OR (protein_100g >= 0 AND protein_100g <= 100)"},
+			{"foods_carbs_range", "carbs_100g IS NULL OR (carbs_100g >= 0 AND carbs_100g <= 100)"},
+			{"foods_fat_range", "fat_100g IS NULL OR (fat_100g >= 0 AND fat_100g <= 100)"},
+			{"foods_fiber_range", "fiber_100g IS NULL OR (fiber_100g >= 0 AND fiber_100g <= 100)"},
+			{"foods_sugar_range", "sugar_100g IS NULL OR (sugar_100g >= 0 AND sugar_100g <= 100)"},
+		}
+		for _, c := range checks {
+			if _, err := tx.Exec(ctx, fmt.Sprintf(`
+				DO $$ BEGIN
+					ALTER TABLE foods ADD CONSTRAINT %s CHECK (%s);
+				EXCEPTION WHEN duplicate_object THEN NULL;
+				END $$`, c.name, c.expr)); err != nil {
+				return err
+			}
+		}
+
+		_, err := tx.Exec(ctx, `
+			CREATE INDEX IF NOT EXISTS foods_name_trgm_idx ON foods USING gin (name gin_trgm_ops);
+			CREATE UNIQUE INDEX IF NOT EXISTS foods_source_code_idx
+				ON foods (source, source_code) WHERE user_id IS NULL;
+			CREATE UNIQUE INDEX IF NOT EXISTS foods_own_name_idx
+				ON foods (user_id, lower(name)) WHERE source = 'own'`)
+		return err
+	})
+}
+
 func ensureSavedFoodsSchema(ctx context.Context, pool *pgxpool.Pool) error {
 	return withTransaction(ctx, pool, func(tx pgx.Tx) error {
 		if _, err := tx.Exec(ctx, `
@@ -963,6 +1023,7 @@ func migrationSteps() []migrationStep {
 		{"api_tokens", ensureAPITokensSchema},
 		{"api_idempotency", ensureAPIIdempotencySchema},
 		{"saved_foods", ensureSavedFoodsSchema},
+		{"food_catalog", ensureFoodCatalogSchema},
 		{"body_profile", ensureBodyProfileSchema},
 		{"weight_goals", ensureWeightGoalsSchema},
 		{"consent", ensureConsentSchema},

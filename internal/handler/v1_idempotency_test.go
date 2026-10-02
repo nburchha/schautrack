@@ -273,6 +273,7 @@ func TestIdempotentPostsReplayInsteadOfDuplicating(t *testing.T) {
 		"POST /entries":                {"/entries", `{"calories":250,"name":"Replay probe"}`},
 		"POST /todos":                  {"/todos", `{"name":"Replay probe","schedule":{"type":"daily"}}`},
 		"POST /saved-foods":            {"/saved-foods", `{"name":"Replay probe food","calories":95}`},
+		"POST /foods":                  {"/foods", fmt.Sprintf(`{"name":"Replay probe catalog food %d","calories_per_100g":95.5}`, time.Now().UnixNano())},
 		"POST /saved-foods/{id}/track": {"/saved-foods/" + strconv.Itoa(seeded.ID) + "/track", `{}`},
 		"POST /ai/estimate":            {"/ai/estimate", `{"image":"ZmFrZQ=="}`},
 	}

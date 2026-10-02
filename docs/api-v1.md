@@ -96,7 +96,7 @@ hours. A request that fails releases its key, so the retry is a fresh attempt
 rather than a replay of the error.
 
 Every endpoint that creates something accepts the header: `POST /entries`,
-`POST /todos`, `POST /saved-foods`, and
+`POST /todos`, `POST /saved-foods`, `POST /foods`, and
 `POST /saved-foods/{id}/track`. The operation parameter lists say which,
 and they are not advisory — the one `POST` that does not honour the header
 (`POST /ai/estimate`) rejects it with `400` instead of ignoring it.
@@ -168,6 +168,8 @@ than retrying blindly.
 | [`PATCH /saved-foods/{id}`](#updatesavedfood) | `foods:write` | Change a saved food |
 | [`DELETE /saved-foods/{id}`](#deletesavedfood) | `foods:write` | Delete a saved food |
 | [`POST /saved-foods/{id}/track`](#tracksavedfood) | `entries:write` | Log a saved food as an entry |
+| [`POST /foods`](#createfood) | `foods:write` | Create a food of your own |
+| [`GET /foods/search`](#searchfoods) | `foods:read` | Search the food catalog |
 | [`GET /notes/{date}`](#getnote) | `notes:read` | Fetch a day's note |
 | [`PUT /notes/{date}`](#putnote) | `notes:write` | Write a day's note |
 | [`GET /plan`](#getplan) | `plan:read` | The weight-loss plan |
@@ -780,6 +782,63 @@ Creates a calorie entry from the saved food and returns it. Requires `entries:wr
 | `429` | [`Problem`](#problem) — Too many requests. The `Retry-After` header gives the number of seconds until the window reopens. |
 | `500` | [`Problem`](#problem) — An unexpected server-side failure. |
 
+## Foods
+
+The searchable food catalog, with nutrients per 100 g.
+
+### Create a food of your own
+
+```http
+POST /api/v1/foods
+```
+
+**Scope:** `foods:write`
+
+Adds a food with values from, say, a package label. Only on request: estimates belong in an ad-hoc component, not in the catalog.
+
+| Parameter | In | Required | Description |
+| --- | --- | --- | --- |
+| `Idempotency-Key` | header |  | Optional. A key you generate once per logical operation and reuse when retrying. The first request executes and its response is stored; a retry with the same key replays that response instead of creating a second record, and carries `Idempotency-Replayed: true`. Reusing a key for a different request body is rejected with 409. Keys are remembered for 24 hours. |
+
+**Request body** (required): [`FoodInput`](#foodinput)
+
+| Status | Response |
+| --- | --- |
+| `201` | [`Food`](#food) — The created food. |
+| `400` | [`Problem`](#problem) — The request is malformed — unparseable JSON, an unknown field, or a bad query parameter. |
+| `401` | [`Problem`](#problem) — No token, or the token is unknown, revoked, or expired. |
+| `403` | [`Problem`](#problem) — The token is valid but lacks the scope this endpoint requires. The `required_scope` field names it. |
+| `409` | [`Problem`](#problem) — The request collides with existing state — a duplicate name, a limit already reached, or a feature not enabled. |
+| `413` | [`Problem`](#problem) — The request body exceeds the 1 MB limit. Attached to every operation that takes a body — the cap is enforced in the decoder, not per endpoint. |
+| `422` | [`Problem`](#problem) — The request is well-formed but its values are rejected. `invalid_params` lists the offending fields. |
+| `429` | [`Problem`](#problem) — Too many requests. The `Retry-After` header gives the number of seconds until the window reopens. |
+| `500` | [`Problem`](#problem) — An unexpected server-side failure. |
+
+### Search the food catalog
+
+```http
+GET /api/v1/foods/search
+```
+
+**Scope:** `foods:read`
+
+Searches the shared catalog and your own foods by name. Typos still match. Exact names rank first, then names starting with the query, then the closest matches. Not paginated: narrow the query instead.
+
+| Parameter | In | Required | Description |
+| --- | --- | --- | --- |
+| `q` | query | yes | The search text, at least 2 characters. |
+| `limit` | query |  | Maximum results to return. Values above 50 are clamped to 50. |
+
+| Status | Response |
+| --- | --- |
+| `200` | [`FoodList`](#foodlist) — The matching foods. |
+| `400` | [`Problem`](#problem) — The request is malformed — unparseable JSON, an unknown field, or a bad query parameter. |
+| `401` | [`Problem`](#problem) — No token, or the token is unknown, revoked, or expired. |
+| `403` | [`Problem`](#problem) — The token is valid but lacks the scope this endpoint requires. The `required_scope` field names it. |
+| `422` | [`Problem`](#problem) — The request is well-formed but its values are rejected. `invalid_params` lists the offending fields. |
+| `429` | [`Problem`](#problem) — Too many requests. The `Retry-After` header gives the number of seconds until the window reopens. |
+| `500` | [`Problem`](#problem) — An unexpected server-side failure. |
+
 ## Notes
 
 One free-text note per day.
@@ -1066,6 +1125,55 @@ A food photo to estimate.
 | --- | --- | --- | --- |
 | `context` | `string` |  | Optional hint, e.g. "a large bowl". |
 | `image` | `string` | yes | The photo as a `data:image/...;base64,...` URI. Maximum 10 MB. |
+
+### Food
+
+A catalog food. All nutrients are per 100 g.
+
+| Field | Type | Required | Description |
+| --- | --- | --- | --- |
+| `calories_per_100g` | `number` or `null` | yes | Energy per 100 g, kilocalories. `null` means unknown. |
+| `created_at` | `string` (date-time) | yes | When it was added to the catalog (UTC). |
+| `id` | `integer` | yes | Server-assigned identifier. |
+| `macros_per_100g` | [`FoodMacros`](#foodmacros) | yes |  |
+| `name` | `string` | yes | Food name. |
+| `source` | `bls` \| `off` \| `own` | yes | Where the food comes from: the BLS, Open Food Facts, or created by the account. |
+| `source_classification` | `string` or `null` | yes | The source's own classification, kept as delivered: the BLS code or the Open Food Facts categories. |
+| `source_code` | `string` or `null` | yes | The source's own code: the BLS code or the EAN. `null` for own foods. |
+
+### FoodInput
+
+A new food of your own, with values per 100 g.
+
+| Field | Type | Required | Description |
+| --- | --- | --- | --- |
+| `calories_per_100g` | `number` | yes | Energy per 100 g, kilocalories. |
+| `carbs_g` | `number` or `null` |  | Carbohydrates, grams per 100 g. |
+| `fat_g` | `number` or `null` |  | Fat, grams per 100 g. |
+| `fiber_g` | `number` or `null` |  | Fibre, grams per 100 g. |
+| `name` | `string` | yes | Food name. Unique per account, case-insensitively. |
+| `protein_g` | `number` or `null` |  | Protein, grams per 100 g. |
+| `sugar_g` | `number` or `null` |  | Sugar, grams per 100 g. |
+
+### FoodList
+
+Matching foods, best match first.
+
+| Field | Type | Required | Description |
+| --- | --- | --- | --- |
+| `data` | array of [`Food`](#food) | yes | The matches. |
+
+### FoodMacros
+
+Macronutrients in grams per 100 g. `null` means unknown, which is distinct from zero.
+
+| Field | Type | Required | Description |
+| --- | --- | --- | --- |
+| `carbs_g` | `number` or `null` | yes | Carbohydrates, grams. |
+| `fat_g` | `number` or `null` | yes | Fat, grams. |
+| `fiber_g` | `number` or `null` | yes | Fibre, grams. |
+| `protein_g` | `number` or `null` | yes | Protein, grams. |
+| `sugar_g` | `number` or `null` | yes | Sugar, grams. |
 
 ### HealthyRange
 

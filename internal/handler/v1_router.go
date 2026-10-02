@@ -194,6 +194,11 @@ func (h *V1Handler) MountAPIV1(pool *pgxpool.Pool) chi.Router {
 			r.With(middleware.RequireScope(service.ScopeEntriesWrite)).Post("/{id}/track", h.withIdempotency(h.TrackSavedFoodV1))
 		})
 
+		r.Route("/foods", func(r chi.Router) {
+			r.With(middleware.RequireScope(service.ScopeFoodsRead)).Get("/search", h.SearchFoodsV1)
+			r.With(middleware.RequireScope(service.ScopeFoodsWrite)).Post("/", h.withIdempotency(h.CreateFoodV1))
+		})
+
 		r.Route("/notes", func(r chi.Router) {
 			r.With(middleware.RequireScope(service.ScopeNotesRead)).Get("/{date}", h.GetNoteV1)
 			r.With(middleware.RequireScope(service.ScopeNotesWrite)).Put("/{date}", h.PutNoteV1)
