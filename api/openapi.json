@@ -1703,6 +1703,270 @@
         ]
       }
     },
+    "/foods": {
+      "post": {
+        "operationId": "createFood",
+        "summary": "Create a food of your own",
+        "description": "Adds a food with values from, say, a package label. Only on request: estimates belong in an ad-hoc component, not in the catalog.",
+        "tags": [
+          "Foods"
+        ],
+        "parameters": [
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "description": "Optional. A key you generate once per logical operation and reuse when retrying. The first request executes and its response is stored; a retry with the same key replays that response instead of creating a second record, and carries `Idempotency-Replayed: true`. Reusing a key for a different request body is rejected with 409. Keys are remembered for 24 hours.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/FoodInput"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "The created food.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Food"
+                }
+              }
+            },
+            "headers": {
+              "Idempotency-Replayed": {
+                "description": "Present and `true` only on a replayed response — the request matched a stored Idempotency-Key and nothing new was created. Absent on the first request. This is the only way to distinguish a replay from a fresh create, since a replay repeats the original status code.",
+                "schema": {
+                  "type": "boolean"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "The request is malformed — unparseable JSON, an unknown field, or a bad query parameter.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No token, or the token is unknown, revoked, or expired.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "The token is valid but lacks the scope this endpoint requires. The `required_scope` field names it.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "The request collides with existing state — a duplicate name, a limit already reached, or a feature not enabled.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "The request body exceeds the 1 MB limit. Attached to every operation that takes a body — the cap is enforced in the decoder, not per endpoint.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "The request is well-formed but its values are rejected. `invalid_params` lists the offending fields.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Too many requests. The `Retry-After` header gives the number of seconds until the window reopens.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "headers": {
+              "Retry-After": {
+                "description": "Seconds to wait before retrying.",
+                "schema": {
+                  "type": "integer"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "An unexpected server-side failure.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": [
+              "foods:write"
+            ]
+          }
+        ]
+      }
+    },
+    "/foods/search": {
+      "get": {
+        "operationId": "searchFoods",
+        "summary": "Search the food catalog",
+        "description": "Searches the shared catalog and your own foods by name. Typos still match. Exact names rank first, then names starting with the query, then the closest matches. Not paginated: narrow the query instead.",
+        "tags": [
+          "Foods"
+        ],
+        "parameters": [
+          {
+            "name": "q",
+            "in": "query",
+            "description": "The search text, at least 2 characters.",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "description": "Maximum results to return. Values above 50 are clamped to 50.",
+            "schema": {
+              "type": "integer",
+              "default": 50,
+              "minimum": 1,
+              "maximum": 50
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The matching foods.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FoodList"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "The request is malformed — unparseable JSON, an unknown field, or a bad query parameter.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No token, or the token is unknown, revoked, or expired.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "The token is valid but lacks the scope this endpoint requires. The `required_scope` field names it.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "The request is well-formed but its values are rejected. `invalid_params` lists the offending fields.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Too many requests. The `Retry-After` header gives the number of seconds until the window reopens.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "headers": {
+              "Retry-After": {
+                "description": "Seconds to wait before retrying.",
+                "schema": {
+                  "type": "integer"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "An unexpected server-side failure.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": [
+              "foods:read"
+            ]
+          }
+        ]
+      }
+    },
     "/links": {
       "get": {
         "operationId": "listLinks",
