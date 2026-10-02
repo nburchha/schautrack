@@ -1004,8 +1004,9 @@ A calorie entry.
 | `calories` | `integer` | yes | Energy in kilocalories. May be negative to record a correction. |
 | `created_at` | `string` (date-time) | yes | When the entry was recorded (UTC). |
 | `date` | `string` (date) | yes | The day this entry belongs to, in the account's time zone. |
+| `eaten_at` | `string` (date-time) | yes | When the food was eaten (UTC). Equals `created_at` if no time was given. |
 | `id` | `integer` | yes | Server-assigned identifier. |
-| `local_time` | `string` | yes | `created_at` rendered as HH:MM in the account's time zone. |
+| `local_time` | `string` | yes | `eaten_at` rendered as HH:MM in the account's time zone. |
 | `macros` | [`Macros`](#macros) | yes |  |
 | `name` | `string` or `null` | yes | What was eaten. Up to 120 bytes. |
 
@@ -1017,7 +1018,8 @@ A new calorie entry. Supply `calories`, at least one macro, or both.
 | --- | --- | --- | --- |
 | `calories` | `integer` |  | Energy in kilocalories. |
 | `carbs_g` | `integer` or `null` |  | Carbohydrates, grams. |
-| `date` | `string` (date) |  | Defaults to today in the account's time zone. |
+| `date` | `string` (date) |  | Defaults to today in the account's time zone, or to the day of `eaten_at`. |
+| `eaten_at` | `string` (date-time) |  | When the food was eaten, RFC 3339 with offset. Sets `date` to that day in the account's time zone; if `date` is also sent it must match. |
 | `fat_g` | `integer` or `null` |  | Fat, grams. |
 | `fiber_g` | `integer` or `null` |  | Fibre, grams. |
 | `name` | `string` |  | What was eaten. |
@@ -1042,7 +1044,8 @@ Fields to change. Omit a field to leave it alone; send `null` to clear a macro o
 | --- | --- | --- | --- |
 | `calories` | `integer` |  | Energy in kilocalories. Rejected while the account computes calories from macros. |
 | `carbs_g` | `integer` or `null` |  | Carbohydrates, grams. |
-| `date` | `string` (date) |  | Move the entry to another day. |
+| `date` | `string` (date) |  | Move the entry to another day. Clears `eaten_at` unless that is sent too. |
+| `eaten_at` | `string` or `null` |  | When the food was eaten, RFC 3339 with offset. Also moves `date`. `null` falls back to `created_at`. |
 | `fat_g` | `integer` or `null` |  | Fat, grams. |
 | `fiber_g` | `integer` or `null` |  | Fibre, grams. |
 | `name` | `string` or `null` |  | What was eaten. `null` clears it. |

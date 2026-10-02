@@ -37,7 +37,11 @@ type v1Entry struct {
 	Macros    v1Macros  `json:"macros"`
 	CreatedAt time.Time `json:"created_at"`
 
-	// LocalTime is created_at rendered in the user's timezone. Clients that
+	// EatenAt is when the food was eaten. It falls back to CreatedAt for
+	// entries recorded without an explicit time.
+	EatenAt time.Time `json:"eaten_at"`
+
+	// LocalTime is EatenAt rendered in the user's timezone. Clients that
 	// just want to show "07:12" should not have to re-derive the user's zone.
 	LocalTime string `json:"local_time"`
 }
@@ -45,18 +49,16 @@ type v1Entry struct {
 // entrySelect is the column list every entry query shares, in the order
 // scanEntry expects.
 const entrySelect = `id, entry_date, amount, entry_name, created_at,
-	protein_g, carbs_g, fat_g, fiber_g, sugar_g`
+	protein_g, carbs_g, fat_g, fiber_g, sugar_g, COALESCE(eaten_at, created_at)`
 
 func scanEntry(row pgx.Row, tz string) (*v1Entry, error) {
 	var e v1Entry
-	var created time.Time
-	if err := row.Scan(&e.ID, &e.Date, &e.Calories, &e.Name, &created,
+	if err := row.Scan(&e.ID, &e.Date, &e.Calories, &e.Name, &e.CreatedAt,
 		&e.Macros.ProteinG, &e.Macros.CarbsG, &e.Macros.FatG,
-		&e.Macros.FiberG, &e.Macros.SugarG); err != nil {
+		&e.Macros.FiberG, &e.Macros.SugarG, &e.EatenAt); err != nil {
 		return nil, err
 	}
-	e.CreatedAt = created
-	e.LocalTime = service.FormatTimeInTz(created, tz)
+	e.LocalTime = service.FormatTimeInTz(e.EatenAt, tz)
 	return &e, nil
 }
 
@@ -210,6 +212,7 @@ func (h *V1Handler) GetEntryV1(w http.ResponseWriter, r *http.Request) {
 // leaving a field alone and clearing it.
 type v1EntryInput struct {
 	Date     *string `json:"date"`
+	EatenAt  *string `json:"eaten_at"`
 	Calories *int    `json:"calories"`
 	Name     *string `json:"name"`
 	ProteinG *int    `json:"protein_g"`
@@ -251,6 +254,27 @@ func (in v1EntryInput) validateMacros() []apierr.InvalidParam {
 	return bad
 }
 
+// parseEatenAt parses an RFC 3339 eaten_at value and checks it against an
+// explicit date, if one was sent. The returned date is eaten_at's calendar day
+// in the account's time zone, which is what entry_date stores.
+func parseEatenAt(raw, explicitDate, tz string) (time.Time, string, *apierr.Problem) {
+	t, err := time.Parse(time.RFC3339, raw)
+	if err != nil {
+		return time.Time{}, "", apierr.Unprocessable("eaten_at is not a valid RFC 3339 timestamp.",
+			apierr.InvalidParam{Name: "eaten_at", Reason: "must be RFC 3339, e.g. 2026-08-05T07:30:00+02:00"})
+	}
+	day := service.FormatDateInTz(t, tz)
+	if !isValidDate(day) {
+		return time.Time{}, "", apierr.Unprocessable("eaten_at is out of range.",
+			apierr.InvalidParam{Name: "eaten_at", Reason: "year out of range"})
+	}
+	if explicitDate != "" && explicitDate != day {
+		return time.Time{}, "", apierr.Unprocessable("date does not match eaten_at in the account's time zone.",
+			apierr.InvalidParam{Name: "date", Reason: "must equal the day of eaten_at, or be omitted"})
+	}
+	return t.UTC(), day, nil
+}
+
 // CreateEntryV1 handles POST /api/v1/entries.
 func (h *V1Handler) CreateEntryV1(w http.ResponseWriter, r *http.Request) {
 	var in v1EntryInput
@@ -267,6 +291,19 @@ func (h *V1Handler) CreateEntryV1(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		date = *in.Date
+	}
+	var eatenAt *time.Time
+	if in.EatenAt != nil {
+		explicit := ""
+		if in.Date != nil {
+			explicit = *in.Date
+		}
+		t, day, prob := parseEatenAt(*in.EatenAt, explicit, v1Tz(r))
+		if prob != nil {
+			apierr.Write(w, r, prob)
+			return
+		}
+		eatenAt, date = &t, day
 	}
 
 	if bad := in.validateMacros(); bad != nil {
@@ -328,6 +365,11 @@ func (h *V1Handler) CreateEntryV1(w http.ResponseWriter, r *http.Request) {
 	cols := []string{"user_id", "entry_date", "amount", "entry_name"}
 	vals := []string{"$1", "$2", "$3", "$4"}
 	args := []any{user.ID, date, calories, nilString(name)}
+	if eatenAt != nil {
+		args = append(args, *eatenAt)
+		cols = append(cols, "eaten_at")
+		vals = append(vals, fmt.Sprintf("$%d", len(args)))
+	}
 	for _, m := range in.macroPairs() {
 		if m.Val == nil {
 			continue
@@ -356,6 +398,7 @@ func (h *V1Handler) CreateEntryV1(w http.ResponseWriter, r *http.Request) {
 // doc comment for why a plain **T does not.
 type v1EntryPatch struct {
 	Date     *string          `json:"date"`
+	EatenAt  Optional[string] `json:"eaten_at"`
 	Calories *int             `json:"calories"`
 	Name     Optional[string] `json:"name"`
 	ProteinG Optional[int]    `json:"protein_g"`
@@ -396,6 +439,30 @@ func (h *V1Handler) UpdateEntryV1(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		set("entry_date", *in.Date)
+		if !in.EatenAt.Set {
+			// A bare day change would leave eaten_at on the old day.
+			set("eaten_at", nil)
+		}
+	}
+	if in.EatenAt.Set {
+		if in.EatenAt.Value == nil {
+			// Clearing falls back to created_at; the day is left alone.
+			set("eaten_at", nil)
+		} else {
+			explicit := ""
+			if in.Date != nil {
+				explicit = *in.Date
+			}
+			t, day, prob := parseEatenAt(*in.EatenAt.Value, explicit, v1Tz(r))
+			if prob != nil {
+				apierr.Write(w, r, prob)
+				return
+			}
+			set("eaten_at", t)
+			if in.Date == nil {
+				set("entry_date", day)
+			}
+		}
 	}
 	if in.Name.Set {
 		if in.Name.Value == nil {
