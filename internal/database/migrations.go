@@ -672,6 +672,58 @@ func ensureFoodCatalogSchema(ctx context.Context, pool *pgxpool.Pool) error {
 	})
 }
 
+// ensureEntryComponentsSchema creates entry components.
+//
+// A component is a snapshot: name and per-100 g values are copied at capture
+// time, so later catalog changes never touch history. food_id is NULL for
+// ad-hoc components, and goes NULL if the food is deleted.
+func ensureEntryComponentsSchema(ctx context.Context, pool *pgxpool.Pool) error {
+	return withTransaction(ctx, pool, func(tx pgx.Tx) error {
+		if _, err := tx.Exec(ctx, `
+			CREATE TABLE IF NOT EXISTS entry_components (
+				id SERIAL PRIMARY KEY,
+				entry_id INTEGER NOT NULL REFERENCES calorie_entries(id) ON DELETE CASCADE,
+				food_id INTEGER REFERENCES foods(id) ON DELETE SET NULL,
+				name TEXT NOT NULL,
+				grams NUMERIC(8,2) NOT NULL,
+				kcal_100g NUMERIC(7,2) NOT NULL,
+				protein_100g NUMERIC(7,2),
+				carbs_100g NUMERIC(7,2),
+				fat_100g NUMERIC(7,2),
+				fiber_100g NUMERIC(7,2),
+				sugar_100g NUMERIC(7,2),
+				created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+			)`); err != nil {
+			return err
+		}
+
+		checks := []struct{ name, expr string }{
+			{"entry_components_grams_range", "grams > 0 AND grams <= 10000"},
+			{"entry_components_kcal_range", "kcal_100g >= 0 AND kcal_100g <= 1000"},
+			{"entry_components_protein_range", "protein_100g IS NULL OR (protein_100g >= 0 AND protein_100g <= 100)"},
+			{"entry_components_carbs_range", "carbs_100g IS NULL OR (carbs_100g >= 0 AND carbs_100g <= 100)"},
+			{"entry_components_fat_range", "fat_100g IS NULL OR (fat_100g >= 0 AND fat_100g <= 100)"},
+			{"entry_components_fiber_range", "fiber_100g IS NULL OR (fiber_100g >= 0 AND fiber_100g <= 100)"},
+			{"entry_components_sugar_range", "sugar_100g IS NULL OR (sugar_100g >= 0 AND sugar_100g <= 100)"},
+		}
+		for _, c := range checks {
+			if _, err := tx.Exec(ctx, fmt.Sprintf(`
+				DO $$ BEGIN
+					ALTER TABLE entry_components ADD CONSTRAINT %s CHECK (%s);
+				EXCEPTION WHEN duplicate_object THEN NULL;
+				END $$`, c.name, c.expr)); err != nil {
+				return err
+			}
+		}
+
+		_, err := tx.Exec(ctx, `
+			CREATE INDEX IF NOT EXISTS entry_components_entry_idx ON entry_components (entry_id);
+			CREATE INDEX IF NOT EXISTS entry_components_food_idx ON entry_components (food_id)
+				WHERE food_id IS NOT NULL`)
+		return err
+	})
+}
+
 func ensureSavedFoodsSchema(ctx context.Context, pool *pgxpool.Pool) error {
 	return withTransaction(ctx, pool, func(tx pgx.Tx) error {
 		if _, err := tx.Exec(ctx, `
@@ -1024,6 +1076,7 @@ func migrationSteps() []migrationStep {
 		{"api_idempotency", ensureAPIIdempotencySchema},
 		{"saved_foods", ensureSavedFoodsSchema},
 		{"food_catalog", ensureFoodCatalogSchema},
+		{"entry_components", ensureEntryComponentsSchema},
 		{"body_profile", ensureBodyProfileSchema},
 		{"weight_goals", ensureWeightGoalsSchema},
 		{"consent", ensureConsentSchema},

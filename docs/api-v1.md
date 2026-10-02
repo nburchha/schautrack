@@ -96,7 +96,8 @@ hours. A request that fails releases its key, so the retry is a fresh attempt
 rather than a replay of the error.
 
 Every endpoint that creates something accepts the header: `POST /entries`,
-`POST /todos`, `POST /saved-foods`, `POST /foods`, and
+`POST /todos`, `POST /saved-foods`, `POST /foods`,
+`POST /entries/{id}/components`, and
 `POST /saved-foods/{id}/track`. The operation parameter lists say which,
 and they are not advisory — the one `POST` that does not honour the header
 (`POST /ai/estimate`) rejects it with `400` instead of ignoring it.
@@ -152,6 +153,9 @@ than retrying blindly.
 | [`GET /entries/{id}`](#getentry) | `entries:read` | Fetch one calorie entry |
 | [`PATCH /entries/{id}`](#updateentry) | `entries:write` | Change a calorie entry |
 | [`DELETE /entries/{id}`](#deleteentry) | `entries:write` | Delete a calorie entry |
+| [`POST /entries/{id}/components`](#addcomponent) | `entries:write` | Add a component to an entry |
+| [`PATCH /entries/{id}/components/{cid}`](#updatecomponent) | `entries:write` | Change a component's amount |
+| [`DELETE /entries/{id}/components/{cid}`](#deletecomponent) | `entries:write` | Remove a component |
 | [`GET /weight`](#listweight) | `weight:read` | List weight readings |
 | [`GET /weight/{date}`](#getweight) | `weight:read` | Fetch one day's weight |
 | [`PUT /weight/{date}`](#putweight) | `weight:write` | Record a day's weight |
@@ -352,6 +356,90 @@ DELETE /api/v1/entries/{id}
 | Status | Response |
 | --- | --- |
 | `204` | Deleted. No body. |
+| `400` | [`Problem`](#problem) — The request is malformed — unparseable JSON, an unknown field, or a bad query parameter. |
+| `401` | [`Problem`](#problem) — No token, or the token is unknown, revoked, or expired. |
+| `403` | [`Problem`](#problem) — The token is valid but lacks the scope this endpoint requires. The `required_scope` field names it. |
+| `404` | [`Problem`](#problem) — No such resource, or it belongs to another account. |
+| `429` | [`Problem`](#problem) — Too many requests. The `Retry-After` header gives the number of seconds until the window reopens. |
+| `500` | [`Problem`](#problem) — An unexpected server-side failure. |
+
+### Add a component to an entry
+
+```http
+POST /api/v1/entries/{id}/components
+```
+
+**Scope:** `entries:write`
+
+The entry's calories and macros become the sum of its components: grams / 100 × value per 100 g, rounded to whole units. A value that is unknown (`null`) is left out of the sum, and a macro no component knows stays `null`. Adding a component to a direct entry replaces its stored values with that sum. At most 50 components per entry.
+
+| Parameter | In | Required | Description |
+| --- | --- | --- | --- |
+| `id` | path | yes | The resource's identifier. |
+| `Idempotency-Key` | header |  | Optional. A key you generate once per logical operation and reuse when retrying. The first request executes and its response is stored; a retry with the same key replays that response instead of creating a second record, and carries `Idempotency-Replayed: true`. Reusing a key for a different request body is rejected with 409. Keys are remembered for 24 hours. |
+
+**Request body** (required): [`ComponentInput`](#componentinput)
+
+| Status | Response |
+| --- | --- |
+| `201` | [`Entry`](#entry) — The updated entry, with its new totals. |
+| `400` | [`Problem`](#problem) — The request is malformed — unparseable JSON, an unknown field, or a bad query parameter. |
+| `401` | [`Problem`](#problem) — No token, or the token is unknown, revoked, or expired. |
+| `403` | [`Problem`](#problem) — The token is valid but lacks the scope this endpoint requires. The `required_scope` field names it. |
+| `404` | [`Problem`](#problem) — No such resource, or it belongs to another account. |
+| `409` | [`Problem`](#problem) — The request collides with existing state — a duplicate name, a limit already reached, or a feature not enabled. |
+| `413` | [`Problem`](#problem) — The request body exceeds the 1 MB limit. Attached to every operation that takes a body — the cap is enforced in the decoder, not per endpoint. |
+| `422` | [`Problem`](#problem) — The request is well-formed but its values are rejected. `invalid_params` lists the offending fields. |
+| `429` | [`Problem`](#problem) — Too many requests. The `Retry-After` header gives the number of seconds until the window reopens. |
+| `500` | [`Problem`](#problem) — An unexpected server-side failure. |
+
+### Change a component's amount
+
+```http
+PATCH /api/v1/entries/{id}/components/{cid}
+```
+
+**Scope:** `entries:write`
+
+Only `grams` can change. The values per 100 g stay as captured. The entry's totals are recomputed.
+
+| Parameter | In | Required | Description |
+| --- | --- | --- | --- |
+| `id` | path | yes | The resource's identifier. |
+| `cid` | path | yes | The component's identifier. |
+
+**Request body** (required): [`ComponentPatch`](#componentpatch)
+
+| Status | Response |
+| --- | --- |
+| `200` | [`Entry`](#entry) — The updated entry, with its new totals. |
+| `400` | [`Problem`](#problem) — The request is malformed — unparseable JSON, an unknown field, or a bad query parameter. |
+| `401` | [`Problem`](#problem) — No token, or the token is unknown, revoked, or expired. |
+| `403` | [`Problem`](#problem) — The token is valid but lacks the scope this endpoint requires. The `required_scope` field names it. |
+| `404` | [`Problem`](#problem) — No such resource, or it belongs to another account. |
+| `413` | [`Problem`](#problem) — The request body exceeds the 1 MB limit. Attached to every operation that takes a body — the cap is enforced in the decoder, not per endpoint. |
+| `422` | [`Problem`](#problem) — The request is well-formed but its values are rejected. `invalid_params` lists the offending fields. |
+| `429` | [`Problem`](#problem) — Too many requests. The `Retry-After` header gives the number of seconds until the window reopens. |
+| `500` | [`Problem`](#problem) — An unexpected server-side failure. |
+
+### Remove a component
+
+```http
+DELETE /api/v1/entries/{id}/components/{cid}
+```
+
+**Scope:** `entries:write`
+
+Returns the updated entry. Removing the last component keeps the last computed totals, so the entry becomes a direct entry.
+
+| Parameter | In | Required | Description |
+| --- | --- | --- | --- |
+| `id` | path | yes | The resource's identifier. |
+| `cid` | path | yes | The component's identifier. |
+
+| Status | Response |
+| --- | --- |
+| `200` | [`Entry`](#entry) — The updated entry. |
 | `400` | [`Problem`](#problem) — The request is malformed — unparseable JSON, an unknown field, or a bad query parameter. |
 | `401` | [`Problem`](#problem) — No token, or the token is unknown, revoked, or expired. |
 | `403` | [`Problem`](#problem) — The token is valid but lacks the scope this endpoint requires. The `required_scope` field names it. |
@@ -1045,6 +1133,43 @@ The desired completion state.
 | --- | --- | --- | --- |
 | `completed` | `boolean` | yes | `true` marks it done on this date, `false` clears it. |
 
+### Component
+
+One ingredient of an entry: a snapshot of a food, in grams. The values per 100 g are copied when it is added and never change.
+
+| Field | Type | Required | Description |
+| --- | --- | --- | --- |
+| `calories_per_100g` | `number` | yes | Energy per 100 g, kilocalories. |
+| `food_id` | `integer` or `null` | yes | The catalog food it was taken from. `null` for an ad-hoc component, or once that food is deleted. |
+| `grams` | `number` | yes | Amount in grams. May be an estimate. |
+| `id` | `integer` | yes | Server-assigned identifier. |
+| `macros_per_100g` | [`FoodMacros`](#foodmacros) | yes |  |
+| `name` | `string` | yes | Name at capture time. |
+
+### ComponentInput
+
+A component to add. Either `food_id` and `grams` (the server copies the food's values), or an ad-hoc component with `name`, `grams` and `calories_per_100g`. Not both.
+
+| Field | Type | Required | Description |
+| --- | --- | --- | --- |
+| `calories_per_100g` | `number` |  | Ad-hoc energy per 100 g, kilocalories. |
+| `carbs_g` | `number` or `null` |  | Ad-hoc carbohydrates, grams per 100 g. |
+| `fat_g` | `number` or `null` |  | Ad-hoc fat, grams per 100 g. |
+| `fiber_g` | `number` or `null` |  | Ad-hoc fibre, grams per 100 g. |
+| `food_id` | `integer` |  | A catalog food: a shared one or one of your own. It needs a calorie value. |
+| `grams` | `number` | yes | Amount in grams. |
+| `name` | `string` |  | Ad-hoc component name. |
+| `protein_g` | `number` or `null` |  | Ad-hoc protein, grams per 100 g. |
+| `sugar_g` | `number` or `null` |  | Ad-hoc sugar, grams per 100 g. |
+
+### ComponentPatch
+
+The component's new amount.
+
+| Field | Type | Required | Description |
+| --- | --- | --- | --- |
+| `grams` | `number` | yes | Amount in grams. |
+
 ### CurvePoint
 
 One week of the projected curve.
@@ -1061,6 +1186,7 @@ A calorie entry.
 | Field | Type | Required | Description |
 | --- | --- | --- | --- |
 | `calories` | `integer` | yes | Energy in kilocalories. May be negative to record a correction. |
+| `components` | array of [`Component`](#component) | yes | The entry's ingredients. Empty for a direct entry. When there are any, `calories` and `macros` are their sum. |
 | `created_at` | `string` (date-time) | yes | When the entry was recorded (UTC). |
 | `date` | `string` (date) | yes | The day this entry belongs to, in the account's time zone. |
 | `eaten_at` | `string` (date-time) | yes | When the food was eaten (UTC). Equals `created_at` if no time was given. |
@@ -1077,6 +1203,7 @@ A new calorie entry. Supply `calories`, at least one macro, or both.
 | --- | --- | --- | --- |
 | `calories` | `integer` |  | Energy in kilocalories. |
 | `carbs_g` | `integer` or `null` |  | Carbohydrates, grams. |
+| `components` | array of [`ComponentInput`](#componentinput) |  | Ingredients. Then `calories` and the macros are computed from them and must be left out. |
 | `date` | `string` (date) |  | Defaults to today in the account's time zone, or to the day of `eaten_at`. |
 | `eaten_at` | `string` (date-time) |  | When the food was eaten, RFC 3339 with offset. Sets `date` to that day in the account's time zone; if `date` is also sent it must match. |
 | `fat_g` | `integer` or `null` |  | Fat, grams. |
@@ -1097,7 +1224,7 @@ A page of entries.
 
 ### EntryPatch
 
-Fields to change. Omit a field to leave it alone; send `null` to clear a macro or the name.
+Fields to change. Omit a field to leave it alone; send `null` to clear a macro or the name. Setting `calories` or a macro on an entry with components works, but the next change to a component overwrites it with the sum.
 
 | Field | Type | Required | Description |
 | --- | --- | --- | --- |

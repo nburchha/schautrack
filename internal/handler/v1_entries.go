@@ -41,6 +41,10 @@ type v1Entry struct {
 	// entries recorded without an explicit time.
 	EatenAt time.Time `json:"eaten_at"`
 
+	// Components are the entry's ingredients. When there are any, Calories and
+	// Macros are their sum. Empty (never null) for a direct entry.
+	Components []v1Component `json:"components"`
+
 	// LocalTime is EatenAt rendered in the user's timezone. Clients that
 	// just want to show "07:12" should not have to re-derive the user's zone.
 	LocalTime string `json:"local_time"`
@@ -52,7 +56,7 @@ const entrySelect = `id, entry_date, amount, entry_name, created_at,
 	protein_g, carbs_g, fat_g, fiber_g, sugar_g, COALESCE(eaten_at, created_at)`
 
 func scanEntry(row pgx.Row, tz string) (*v1Entry, error) {
-	var e v1Entry
+	e := v1Entry{Components: []v1Component{}}
 	if err := row.Scan(&e.ID, &e.Date, &e.Calories, &e.Name, &e.CreatedAt,
 		&e.Macros.ProteinG, &e.Macros.CarbsG, &e.Macros.FatG,
 		&e.Macros.FiberG, &e.Macros.SugarG, &e.EatenAt); err != nil {
@@ -157,10 +161,19 @@ func (h *V1Handler) ListEntries(w http.ResponseWriter, r *http.Request) {
 		apierr.Write(w, r, dbFail("iterate entries", err))
 		return
 	}
+	rows.Close()
 
 	hasMore := len(entries) > limit
 	if hasMore {
 		entries = entries[:limit]
+	}
+	ptrs := make([]*v1Entry, len(entries))
+	for i := range entries {
+		ptrs[i] = &entries[i]
+	}
+	if err := attachComponents(r.Context(), h.Pool, ptrs); err != nil {
+		apierr.Write(w, r, dbFail("load components", err))
+		return
 	}
 	out := v1List[v1Entry]{Data: entries, HasMore: &hasMore}
 	if hasMore {
@@ -204,6 +217,10 @@ func (h *V1Handler) GetEntryV1(w http.ResponseWriter, r *http.Request) {
 		apierr.Write(w, r, dbFail("get entry", err))
 		return
 	}
+	if err := attachComponents(r.Context(), h.Pool, []*v1Entry{e}); err != nil {
+		apierr.Write(w, r, dbFail("load components", err))
+		return
+	}
 	writeV1(w, http.StatusOK, e)
 }
 
@@ -220,6 +237,10 @@ type v1EntryInput struct {
 	FatG     *int    `json:"fat_g"`
 	FiberG   *int    `json:"fiber_g"`
 	SugarG   *int    `json:"sugar_g"`
+
+	// Components make the entry's totals a sum, so calories and macros must
+	// then be left out.
+	Components []v1ComponentInput `json:"components"`
 }
 
 func (in v1EntryInput) macroPairs() []struct {
@@ -308,6 +329,25 @@ func (h *V1Handler) CreateEntryV1(w http.ResponseWriter, r *http.Request) {
 
 	if bad := in.validateMacros(); bad != nil {
 		apierr.Write(w, r, apierr.Unprocessable("One or more macro values are out of range.", bad...))
+		return
+	}
+
+	if len(in.Components) > 0 {
+		sent := in.Calories != nil
+		for _, m := range in.macroPairs() {
+			sent = sent || m.Val != nil
+		}
+		if sent {
+			apierr.Write(w, r, apierr.Unprocessable(
+				"Calories and macros are computed from the components; leave them out.",
+				apierr.InvalidParam{Name: "components", Reason: "cannot be combined with calories or macros"}))
+			return
+		}
+		name := ""
+		if in.Name != nil {
+			name = truncateUTF8(strings.TrimSpace(*in.Name), 120)
+		}
+		h.createEntryWithComponents(w, r, in.Components, date, name, eatenAt)
 		return
 	}
 
@@ -565,6 +605,11 @@ func (h *V1Handler) UpdateEntryV1(w http.ResponseWriter, r *http.Request) {
 			}
 			e.Calories = *computed
 		}
+	}
+
+	if err := attachComponents(r.Context(), tx, []*v1Entry{e}); err != nil {
+		apierr.Write(w, r, dbFail("load components", err))
+		return
 	}
 
 	if err := tx.Commit(r.Context()); err != nil {

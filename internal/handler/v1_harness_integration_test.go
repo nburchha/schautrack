@@ -350,6 +350,7 @@ func v1Routes(t *testing.T) []v1Route {
 // what a valid value looks like instead of silently dropping coverage.
 var pathParams = map[string]string{
 	"{id}":   "1",
+	"{cid}":  "1",
 	"{date}": "2026-08-05",
 	"{code}": "4006381333931",
 }

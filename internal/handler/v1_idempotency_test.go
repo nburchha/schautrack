@@ -267,12 +267,25 @@ func TestIdempotentPostsReplayInsteadOfDuplicating(t *testing.T) {
 		t.Fatalf("seeded food is not JSON: %v", err)
 	}
 
+	rec = hh.post(t, "/entries", "", `{"calories":50,"name":"Component host"}`)
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("seeding an entry: status = %d, body %s", rec.Code, rec.Body.String())
+	}
+	var seededEntry struct {
+		ID int `json:"id"`
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &seededEntry); err != nil {
+		t.Fatalf("seeded entry is not JSON: %v", err)
+	}
+
 	// A valid body for each idempotent POST. A new idempotent route with no
 	// fixture fails the test below rather than silently going uncovered.
 	fixtures := map[string]struct{ path, body string }{
-		"POST /entries":                {"/entries", `{"calories":250,"name":"Replay probe"}`},
-		"POST /todos":                  {"/todos", `{"name":"Replay probe","schedule":{"type":"daily"}}`},
-		"POST /saved-foods":            {"/saved-foods", `{"name":"Replay probe food","calories":95}`},
+		"POST /entries":     {"/entries", `{"calories":250,"name":"Replay probe"}`},
+		"POST /todos":       {"/todos", `{"name":"Replay probe","schedule":{"type":"daily"}}`},
+		"POST /saved-foods": {"/saved-foods", `{"name":"Replay probe food","calories":95}`},
+		"POST /entries/{id}/components": {"/entries/" + strconv.Itoa(seededEntry.ID) + "/components",
+			`{"name":"Replay probe component","grams":50,"calories_per_100g":100}`},
 		"POST /foods":                  {"/foods", fmt.Sprintf(`{"name":"Replay probe catalog food %d","calories_per_100g":95.5}`, time.Now().UnixNano())},
 		"POST /saved-foods/{id}/track": {"/saved-foods/" + strconv.Itoa(seeded.ID) + "/track", `{}`},
 		"POST /ai/estimate":            {"/ai/estimate", `{"image":"ZmFrZQ=="}`},

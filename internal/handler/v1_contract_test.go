@@ -64,7 +64,8 @@ func abbreviate(raw []byte, max int) string {
 func TestEntryMatchesSchema(t *testing.T) {
 	checkSchema(t, "Entry", v1Entry{
 		ID: 1, Date: "2026-08-05", Calories: 450, Name: ptr("Porridge"),
-		Macros: fullMacros, CreatedAt: fixedTime, LocalTime: "07:12",
+		Macros: fullMacros, CreatedAt: fixedTime, EatenAt: fixedTime, LocalTime: "07:12",
+		Components: []v1Component{},
 	})
 }
 
@@ -73,7 +74,8 @@ func TestEntryMatchesSchema(t *testing.T) {
 func TestEntryWithNullsMatchesSchema(t *testing.T) {
 	checkSchema(t, "Entry", v1Entry{
 		ID: 2, Date: "2026-08-05", Calories: 0, Name: nil,
-		Macros: emptyMacros, CreatedAt: fixedTime, LocalTime: "07:12",
+		Macros: emptyMacros, CreatedAt: fixedTime, EatenAt: fixedTime, LocalTime: "07:12",
+		Components: []v1Component{},
 	})
 }
 
@@ -83,7 +85,8 @@ func TestEntryListMatchesSchema(t *testing.T) {
 	checkSchema(t, "EntryList", v1List[v1Entry]{
 		Data: []v1Entry{{
 			ID: 1, Date: "2026-08-05", Calories: 450, Name: ptr("Porridge"),
-			Macros: fullMacros, CreatedAt: fixedTime, LocalTime: "07:12",
+			Macros: fullMacros, CreatedAt: fixedTime, EatenAt: fixedTime, LocalTime: "07:12",
+			Components: []v1Component{},
 		}},
 		HasMore: &hasMore, NextCursor: &cursor,
 	})
@@ -706,4 +709,17 @@ func TestSettingsWriteIsNotImpliedByReads(t *testing.T) {
 			t.Errorf("read scope %q implies settings:write", s)
 		}
 	}
+}
+
+func TestEntryWithComponentsMatchesSchema(t *testing.T) {
+	foodID := 7
+	checkSchema(t, "Entry", v1Entry{
+		ID: 3, Date: "2026-08-05", Calories: 314, Name: ptr("Porridge"),
+		Macros: emptyMacros, CreatedAt: fixedTime, EatenAt: fixedTime, LocalTime: "07:12",
+		Components: []v1Component{
+			{ID: 1, FoodID: &foodID, Name: "Oats", Grams: 50, Calories: 372,
+				Macros: v1FoodMacros{ProteinG: ptr(13.5)}},
+			{ID: 2, Name: "Milk", Grams: 200, Calories: 64},
+		},
+	})
 }
