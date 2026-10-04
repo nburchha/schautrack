@@ -52,6 +52,30 @@ export default function Terms() {
               }}
             />
           </p>
+          <p>
+            <Trans
+              t={t}
+              i18nKey="terms.thirdPartyData.blsBody"
+              components={{
+                linkBls: (
+                  <a
+                    href="https://blsdb.de"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-primary underline"
+                  />
+                ),
+                linkCc: (
+                  <a
+                    href="https://creativecommons.org/licenses/by/4.0/"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-primary underline"
+                  />
+                ),
+              }}
+            />
+          </p>
 
           <h3 className="font-semibold text-foreground">{t('terms.acceptableUse.heading')}</h3>
           <p>{t('terms.acceptableUse.body')}</p>
