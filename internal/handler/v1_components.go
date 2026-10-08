@@ -39,16 +39,6 @@ type v1Component struct {
 const componentSelect = `id, food_id, name, grams::float8, kcal_100g::float8,
 	protein_100g::float8, carbs_100g::float8, fat_100g::float8, fiber_100g::float8, sugar_100g::float8`
 
-func scanComponent(row pgx.Row) (*v1Component, error) {
-	var c v1Component
-	if err := row.Scan(&c.ID, &c.FoodID, &c.Name, &c.Grams, &c.Calories,
-		&c.Macros.ProteinG, &c.Macros.CarbsG, &c.Macros.FatG,
-		&c.Macros.FiberG, &c.Macros.SugarG); err != nil {
-		return nil, err
-	}
-	return &c, nil
-}
-
 // querier is what pgxpool.Pool and pgx.Tx have in common.
 type querier interface {
 	Query(ctx context.Context, sql string, args ...any) (pgx.Rows, error)
