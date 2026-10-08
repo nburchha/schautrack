@@ -25,7 +25,8 @@ COPY cmd/ cmd/
 COPY internal/ internal/
 
 ARG BUILD_VERSION=dev
-RUN CGO_ENABLED=0 go build -ldflags="-s -w -X main.version=${BUILD_VERSION}" -o /server ./cmd/server
+RUN CGO_ENABLED=0 go build -ldflags="-s -w -X main.version=${BUILD_VERSION}" -o /server ./cmd/server && \
+    CGO_ENABLED=0 go build -ldflags="-s -w" -o /import-foods ./cmd/import-foods
 
 FROM alpine:3.24
 
@@ -48,6 +49,7 @@ RUN apk upgrade --no-cache && \
 WORKDIR /app
 
 COPY --from=server /server ./server
+COPY --from=server /import-foods ./import-foods
 COPY --from=client /app/client/dist ./client/dist
 COPY public ./public
 

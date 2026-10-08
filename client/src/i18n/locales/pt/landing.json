@@ -153,7 +153,8 @@
     },
     "thirdPartyData": {
       "heading": "Dados de Terceiros",
-      "body": "Os dados nutricionais de códigos de barras são fornecidos pela <linkOff>Open Food Facts</linkOff> ao abrigo da <linkOdbl>Open Database License (ODbL)</linkOdbl>. Estes dados são contribuídos pela comunidade e podem nem sempre ser precisos."
+      "body": "Os dados nutricionais de códigos de barras são fornecidos pela <linkOff>Open Food Facts</linkOff> ao abrigo da <linkOdbl>Open Database License (ODbL)</linkOdbl>. Estes dados são contribuídos pela comunidade e podem nem sempre ser precisos.",
+      "blsBody": "Os dados de alimentos genéricos provêm do <linkBls>Bundeslebensmittelschlüssel (BLS) 4.0</linkBls> do Max Rubner-Institut (MRI), com licença <linkCc>CC BY 4.0</linkCc>. Max Rubner-Institut (2025): Bundeslebensmittelschlüssel (BLS), Version 4.0 – Deutsche Nährstoffdatenbank. Karlsruhe. DOI: 10.25826/Data20251217-134202-0."
     },
     "acceptableUse": {
       "heading": "Utilização Aceitável",

@@ -153,7 +153,8 @@
     },
     "thirdPartyData": {
       "heading": "Gegevens van derden",
-      "body": "Voedingsgegevens van barcodes worden geleverd door <linkOff>Open Food Facts</linkOff> onder de <linkOdbl>Open Database License (ODbL)</linkOdbl>. Deze gegevens worden door de community aangeleverd en zijn mogelijk niet altijd nauwkeurig."
+      "body": "Voedingsgegevens van barcodes worden geleverd door <linkOff>Open Food Facts</linkOff> onder de <linkOdbl>Open Database License (ODbL)</linkOdbl>. Deze gegevens worden door de community aangeleverd en zijn mogelijk niet altijd nauwkeurig.",
+      "blsBody": "Gegevens over algemene voedingsmiddelen komen uit de <linkBls>Bundeslebensmittelschlüssel (BLS) 4.0</linkBls> van het Max Rubner-Institut (MRI), onder licentie <linkCc>CC BY 4.0</linkCc>. Max Rubner-Institut (2025): Bundeslebensmittelschlüssel (BLS), Version 4.0 – Deutsche Nährstoffdatenbank. Karlsruhe. DOI: 10.25826/Data20251217-134202-0."
     },
     "acceptableUse": {
       "heading": "Toegestaan gebruik",

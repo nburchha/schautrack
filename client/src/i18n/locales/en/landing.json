@@ -170,6 +170,7 @@
       "heading": "Termination"
     },
     "thirdPartyData": {
+      "blsBody": "Generic food data comes from the <linkBls>Bundeslebensmittelschlüssel (BLS) 4.0</linkBls> by the Max Rubner-Institut (MRI), licensed under <linkCc>CC BY 4.0</linkCc>. Max Rubner-Institut (2025): Bundeslebensmittelschlüssel (BLS), Version 4.0 – Deutsche Nährstoffdatenbank. Karlsruhe. DOI: 10.25826/Data20251217-134202-0.",
       "body": "Barcode nutrition data is provided by <linkOff>Open Food Facts</linkOff> under the <linkOdbl>Open Database License (ODbL)</linkOdbl>. This data is community-contributed and may not always be accurate.",
       "heading": "Third-Party Data"
     },

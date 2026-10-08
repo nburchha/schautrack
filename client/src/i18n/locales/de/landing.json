@@ -148,7 +148,8 @@
     },
     "thirdPartyData": {
       "heading": "Daten Dritter",
-      "body": "Barcode-Nährwertdaten werden von <linkOff>Open Food Facts</linkOff> unter der <linkOdbl>Open Database License (ODbL)</linkOdbl> bereitgestellt. Diese Daten stammen aus Community-Beiträgen und sind möglicherweise nicht immer korrekt."
+      "body": "Barcode-Nährwertdaten werden von <linkOff>Open Food Facts</linkOff> unter der <linkOdbl>Open Database License (ODbL)</linkOdbl> bereitgestellt. Diese Daten stammen aus Community-Beiträgen und sind möglicherweise nicht immer korrekt.",
+      "blsBody": "Daten zu allgemeinen Lebensmitteln stammen aus dem <linkBls>Bundeslebensmittelschlüssel (BLS) 4.0</linkBls> des Max Rubner-Instituts (MRI) unter der Lizenz <linkCc>CC BY 4.0</linkCc>. Max Rubner-Institut (2025): Bundeslebensmittelschlüssel (BLS), Version 4.0 – Deutsche Nährstoffdatenbank. Karlsruhe. DOI: 10.25826/Data20251217-134202-0."
     },
     "acceptableUse": {
       "heading": "Angemessene Nutzung",
