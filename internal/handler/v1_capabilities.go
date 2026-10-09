@@ -48,9 +48,14 @@ func (h *V1Handler) UpdateMeV1(w http.ResponseWriter, r *http.Request) {
 		sets = append(sets, fmt.Sprintf("%s = $%d", col, len(args)))
 	}
 
+	// The effective goal lives in macro_goals.calories (service.GetCalorieGoal
+	// prefers it and ignores the legacy column once it exists), so that is the
+	// key written here. The legacy column is nulled to match the startup
+	// migration; only the calories key is touched.
 	if in.DailyGoal.Set {
 		if in.DailyGoal.Value == nil {
 			set("daily_goal", nil)
+			sets = append(sets, "macro_goals = COALESCE(macro_goals, '{}'::jsonb) - 'calories'")
 		} else if v := *in.DailyGoal.Value; v < 1 || v > MaxEntryCalories {
 			apierr.Write(w, r, apierr.Unprocessable("The daily goal is out of range.",
 				apierr.InvalidParam{
@@ -59,7 +64,10 @@ func (h *V1Handler) UpdateMeV1(w http.ResponseWriter, r *http.Request) {
 				}))
 			return
 		} else {
-			set("daily_goal", v)
+			set("daily_goal", nil)
+			args = append(args, v)
+			sets = append(sets, fmt.Sprintf(
+				"macro_goals = jsonb_set(COALESCE(macro_goals, '{}'::jsonb), '{calories}', to_jsonb($%d::int))", len(args)))
 		}
 	}
 
@@ -321,7 +329,8 @@ func (h *V1Handler) buildMe(r *http.Request, user *model.User) v1Me {
 	out.User.Email = user.Email
 	out.User.Timezone = tz
 	out.User.WeightUnit = unit
-	out.User.DailyGoal = user.DailyGoal
+	out.User.DailyGoal = service.GetCalorieGoal(
+		service.ParseMacroUser(user.MacrosEnabled, user.MacroGoals, user.DailyGoal, user.GoalThreshold))
 	out.User.Language = user.Language
 
 	// The three stored booleans map straight across. Macros do not: the column

@@ -5241,7 +5241,7 @@
                   "integer",
                   "null"
                 ],
-                "description": "Daily calorie goal, if set."
+                "description": "Effective daily calorie goal (the app's calorie macro goal, else the legacy value), if set."
               },
               "email": {
                 "type": "string",
@@ -6007,7 +6007,7 @@
               "integer",
               "null"
             ],
-            "description": "Daily calorie goal. `null` clears it.",
+            "description": "Daily calorie goal (stored as the app's calorie macro goal). `null` clears it.",
             "minimum": 1,
             "maximum": 9999
           },
