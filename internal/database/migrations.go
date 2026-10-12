@@ -664,6 +664,8 @@ func ensureFoodCatalogSchema(ctx context.Context, pool *pgxpool.Pool) error {
 
 		_, err := tx.Exec(ctx, `
 			CREATE INDEX IF NOT EXISTS foods_name_trgm_idx ON foods USING gin (name gin_trgm_ops);
+			CREATE INDEX IF NOT EXISTS foods_name_nospace_trgm_idx
+				ON foods USING gin (replace(name, ' ', '') gin_trgm_ops);
 			CREATE UNIQUE INDEX IF NOT EXISTS foods_source_code_idx
 				ON foods (source, source_code) WHERE user_id IS NULL;
 			CREATE UNIQUE INDEX IF NOT EXISTS foods_own_name_idx
