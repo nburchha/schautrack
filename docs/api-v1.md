@@ -1428,7 +1428,7 @@ The account this token belongs to.
 
 | Field | Type | Required | Description |
 | --- | --- | --- | --- |
-| `daily_goal` | `integer` or `null` | yes | Daily calorie goal, if set. |
+| `daily_goal` | `integer` or `null` | yes | Effective daily calorie goal (the app's calorie macro goal, else the legacy value), if set. |
 | `email` | `string` | yes | Account email. |
 | `id` | `integer` | yes | Account identifier. |
 | `language` | `string` or `null` | yes | UI language, if set. |
@@ -1616,7 +1616,7 @@ Account settings to change. Omit a field to leave it alone.
 
 | Field | Type | Required | Description |
 | --- | --- | --- | --- |
-| `daily_goal` | `integer` or `null` |  | Daily calorie goal. `null` clears it. |
+| `daily_goal` | `integer` or `null` |  | Daily calorie goal (stored as the app's calorie macro goal). `null` clears it. |
 | `language` | `string` or `null` |  | UI language: one of en, de, es, fr, it, nl, pl, pt. `null` restores automatic. |
 | `timezone` | `string` |  | IANA time zone name, e.g. `Europe/Berlin`. Decides what every bare date means. |
 | `weight_unit` | `kg` \| `lb` |  | Display unit. Changing it does NOT convert stored readings — they are kept as entered. |

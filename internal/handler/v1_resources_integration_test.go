@@ -559,6 +559,44 @@ func TestV1MeSettingsApply(t *testing.T) {
 	if goal != nil {
 		t.Errorf("daily_goal in the database = %d, want NULL", *goal)
 	}
+	var noCalories bool
+	if err := e.Pool.QueryRow(e.Ctx, `SELECT NOT (COALESCE(macro_goals, '{}'::jsonb) ? 'calories') FROM users WHERE id = $1`, e.UserID).Scan(&noCalories); err != nil {
+		t.Fatalf("reading macro_goals back: %v", err)
+	}
+	if !noCalories {
+		t.Error("macro_goals.calories still set after an explicit null")
+	}
+}
+
+// TestV1MeReportsGoalFromMacroGoals is the state after the startup migration:
+// the goal lives in macro_goals.calories and the legacy column is NULL.
+func TestV1MeReportsGoalFromMacroGoals(t *testing.T) {
+	e := newV1Env(t)
+	token := e.token(service.ScopeSettingsWrite)
+
+	if _, err := e.Pool.Exec(e.Ctx,
+		`UPDATE users SET macro_goals = '{"calories": 2000, "protein": 120}', daily_goal = NULL WHERE id = $1`, e.UserID); err != nil {
+		t.Fatalf("seeding goal: %v", err)
+	}
+	var me v1Me
+	decodeJSON(t, e.get("/api/v1/me", token), &me)
+	if me.User.DailyGoal == nil || *me.User.DailyGoal != 2000 {
+		t.Fatalf("daily_goal = %v, want 2000", me.User.DailyGoal)
+	}
+
+	// PATCH changes the effective goal and leaves the other macro goals alone.
+	rec := e.patch("/api/v1/me", token, `{"daily_goal":1800}`)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d (body: %s)", rec.Code, rec.Body.String())
+	}
+	decodeJSON(t, rec, &me)
+	if me.User.DailyGoal == nil || *me.User.DailyGoal != 1800 {
+		t.Fatalf("daily_goal after PATCH = %v, want 1800", me.User.DailyGoal)
+	}
+	var protein int
+	if err := e.Pool.QueryRow(e.Ctx, `SELECT (macro_goals->>'protein')::int FROM users WHERE id = $1`, e.UserID).Scan(&protein); err != nil || protein != 120 {
+		t.Errorf("protein goal = %d (err %v), want 120 untouched", protein, err)
+	}
 }
 
 // TestV1MeNeedsNoScopeButPatchDoes is invariant #5's neighbour: reading who you

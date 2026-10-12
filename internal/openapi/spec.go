@@ -609,7 +609,7 @@ func schemas() map[string]*Schema {
 				"email":       str("Account email."),
 				"timezone":    str("IANA time zone. Determines what `today` and every bare date mean."),
 				"weight_unit": {Type: "string", Enum: []any{"kg", "lb"}, Description: "The unit weight readings are stored in."},
-				"daily_goal":  nullInt("Daily calorie goal, if set."),
+				"daily_goal":  nullInt("Effective daily calorie goal (the app's calorie macro goal, else the legacy value), if set."),
 				"language":    nullStr("UI language, if set."),
 			}, "id", "email", "timezone", "weight_unit", "daily_goal", "language"),
 			"token": object("The token that authenticated this request.", map[string]*Schema{
@@ -683,7 +683,7 @@ func schemas() map[string]*Schema {
 		}, "data"),
 
 		"SettingsPatch": object("Account settings to change. Omit a field to leave it alone.", map[string]*Schema{
-			"daily_goal":  withRange(nullInt("Daily calorie goal. `null` clears it."), 1, 9999),
+			"daily_goal":  withRange(nullInt("Daily calorie goal (stored as the app's calorie macro goal). `null` clears it."), 1, 9999),
 			"timezone":    str("IANA time zone name, e.g. `Europe/Berlin`. Decides what every bare date means."),
 			"weight_unit": {Type: "string", Enum: []any{"kg", "lb"}, Description: "Display unit. Changing it does NOT convert stored readings — they are kept as entered."},
 			"language":    nullStr("UI language: one of en, de, es, fr, it, nl, pl, pt. `null` restores automatic."),
