@@ -67,7 +67,8 @@ func likeEscape(s string) string {
 //
 // Matches global catalog foods and the caller's own. Substring matches and
 // trigram-similar names both count, so a typo still finds the food. Exact
-// names rank first, then prefixes, then similarity; ties go to the caller's
+// names rank first, then prefixes, then similarity. Spaces are ignored on both
+// sides, so "Haferflocken" finds the BLS's "Hafer Flocken"; ties go to the caller's
 // own foods, then to shorter names.
 func (h *V1Handler) SearchFoodsV1(w http.ResponseWriter, r *http.Request) {
 	q := strings.TrimSpace(r.URL.Query().Get("q"))
@@ -94,19 +95,23 @@ func (h *V1Handler) SearchFoodsV1(w http.ResponseWriter, r *http.Request) {
 	}
 
 	user := v1User(r)
+	compact := strings.Join(strings.Fields(q), "")
 	rows, err := h.Pool.Query(r.Context(), `
 		SELECT `+foodSelect+`
 		FROM foods
 		WHERE (user_id IS NULL OR user_id = $2)
-		  AND (name ILIKE '%' || $3 || '%' ESCAPE '\' OR $1 <% name)
-		ORDER BY lower(name) = lower($1) DESC,
-		         name ILIKE $3 || '%' ESCAPE '\' DESC,
+		  AND (name ILIKE '%' || $3 || '%' ESCAPE '\'
+		       OR replace(name, ' ', '') ILIKE '%' || $5 || '%' ESCAPE '\'
+		       OR $1 <% name)
+		ORDER BY lower(replace(name, ' ', '')) = lower($6) DESC,
+		         replace(name, ' ', '') ILIKE $5 || '%' ESCAPE '\' DESC,
 		         GREATEST(word_similarity($1, name), similarity(name, $1)) DESC,
 		         (user_id IS NOT NULL) DESC,
 		         length(name),
 		         id
 		LIMIT $4`,
-		q, user.ID, likeEscape(q), limit)
+		q, user.ID, likeEscape(q), limit,
+		likeEscape(compact), compact)
 	if err != nil {
 		apierr.Write(w, r, dbFail("search foods", err))
 		return

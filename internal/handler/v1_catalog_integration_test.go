@@ -69,6 +69,34 @@ func TestV1FoodSearchRanking(t *testing.T) {
 	}
 }
 
+// The BLS splits compounds ("Hafer Flocken"); users type them joined.
+func TestV1FoodSearchIgnoresSpacesInCompounds(t *testing.T) {
+	e := newV1Env(t)
+	token := e.token(service.ScopeFoodsRead)
+	tag := fmt.Sprintf("zs%d", time.Now().UnixNano()%1_000_000_000)
+	kcal := 348.0
+
+	e.seedCatalogFood(tag+"-1", tag+"Hafer Flocken", &kcal)
+	e.seedCatalogFood(tag+"-2", tag+"Haferflocken-Nussplätzchen", &kcal)
+	e.seedCatalogFood(tag+"-3", tag+"Haferflockenauflauf mit Kakao", &kcal)
+
+	got := e.searchFoods(token, tag+"Haferflocken")
+	// The shared test database keeps other runs' rows, which trigram
+	// similarity may also return; look only at this run's.
+	var mine []string
+	for _, f := range got {
+		if strings.HasPrefix(f.Name, tag) {
+			mine = append(mine, f.Name)
+		}
+	}
+	if len(mine) != 3 || mine[0] != tag+"Hafer Flocken" {
+		t.Errorf("joined query: got %v, want the split compound first of 3", mine)
+	}
+	if got := e.searchFoods(token, tag+"Hafer Flocken"); len(got) == 0 || got[0].Name != tag+"Hafer Flocken" {
+		t.Errorf("split query: got %v", got)
+	}
+}
+
 func TestV1FoodSearchTreatsWildcardsLiterally(t *testing.T) {
 	e := newV1Env(t)
 	token := e.token(service.ScopeFoodsRead)
