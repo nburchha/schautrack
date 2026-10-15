@@ -58,7 +58,7 @@ async function pick(query: string, food: Food, grams: string) {
   await userEvent.click(screen.getByTestId('food-search-add'));
 }
 
-const timeTrigger = () => within(screen.getByTestId('entry-form-time')).getByTestId('time-picker-trigger');
+const timeInput = () => screen.getByTestId('entry-form-time-input') as HTMLInputElement;
 const dateInput = () => screen.getByLabelText(/date/i) as HTMLInputElement;
 
 describe('EntryForm with catalog components', () => {
@@ -144,14 +144,16 @@ describe('EntryForm time field', () => {
     useAuthStore.setState({ user: { id: 1, timezone: TZ } as User });
   });
 
-  it('is empty for today', () => {
+  it('is a native time input, empty for today', () => {
     renderForm();
-    expect(timeTrigger()).toHaveTextContent(/set time/i);
+    expect(timeInput()).toHaveAttribute('type', 'time');
+    expect(timeInput()).toHaveValue('');
+    expect(screen.queryByTestId('entry-form-time-clear')).not.toBeInTheDocument();
   });
 
   it('starts at 09:00 on another day and sends it', async () => {
     renderForm(PAST);
-    expect(timeTrigger()).toHaveTextContent('09:00');
+    expect(timeInput()).toHaveValue('09:00');
 
     await userEvent.type(screen.getByLabelText('Calories'), '500');
     await userEvent.click(screen.getByRole('button', { name: 'Track' }));
@@ -165,27 +167,24 @@ describe('EntryForm time field', () => {
   it('follows the date until the user picks a time of their own', async () => {
     renderForm();
     fireEvent.change(dateInput(), { target: { value: PAST } });
-    expect(timeTrigger()).toHaveTextContent('09:00');
+    expect(timeInput()).toHaveValue('09:00');
 
     fireEvent.change(dateInput(), { target: { value: today } });
-    expect(timeTrigger()).toHaveTextContent(/set time/i);
+    expect(timeInput()).toHaveValue('');
 
     fireEvent.change(dateInput(), { target: { value: PAST } });
-    await userEvent.click(timeTrigger());
-    await userEvent.click(screen.getByRole('button', { name: '18' }));
-    await userEvent.click(screen.getByRole('button', { name: /done/i }));
-    expect(timeTrigger()).toHaveTextContent('18:00');
+    fireEvent.change(timeInput(), { target: { value: '18:00' } });
+    expect(timeInput()).toHaveValue('18:00');
 
     // A deliberate choice survives another date change.
     fireEvent.change(dateInput(), { target: { value: '2026-01-16' } });
-    expect(timeTrigger()).toHaveTextContent('18:00');
+    expect(timeInput()).toHaveValue('18:00');
   });
 
   it('lets the user drop the default time', async () => {
     renderForm(PAST);
-    await userEvent.click(timeTrigger());
-    await userEvent.click(screen.getByRole('button', { name: /clear/i }));
-    expect(timeTrigger()).toHaveTextContent(/set time/i);
+    await userEvent.click(screen.getByTestId('entry-form-time-clear'));
+    expect(timeInput()).toHaveValue('');
 
     await userEvent.type(screen.getByLabelText('Calories'), '500');
     await userEvent.click(screen.getByRole('button', { name: 'Track' }));
@@ -195,10 +194,7 @@ describe('EntryForm time field', () => {
 
   it('sends a time chosen for today, in the account\'s zone', async () => {
     renderForm();
-    await userEvent.click(timeTrigger());
-    await userEvent.click(screen.getByRole('button', { name: '07' }));
-    await userEvent.click(screen.getAllByRole('button', { name: '30' })[0]);
-    await userEvent.click(screen.getByRole('button', { name: /done/i }));
+    fireEvent.change(timeInput(), { target: { value: '07:30' } });
 
     await userEvent.type(screen.getByLabelText('Calories'), '300');
     await userEvent.click(screen.getByRole('button', { name: 'Track' }));

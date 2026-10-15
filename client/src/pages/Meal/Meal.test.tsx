@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { render, screen, waitFor, within } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter, Route, Routes } from 'react-router';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
@@ -187,17 +187,17 @@ describe('Meal page', () => {
     expect(addComponent).not.toHaveBeenCalled();
   });
 
-  it('saves the eaten time once, when the picker closes', async () => {
+  it('saves the eaten time once, when the time input loses focus', async () => {
     vi.mocked(getEntry).mockResolvedValue(detail([oats]));
     vi.mocked(setEatenAt).mockResolvedValue({ ok: true });
     renderPage();
 
-    await userEvent.click(within(await screen.findByTestId('meal-time')).getByTestId('time-picker-trigger'));
-    await userEvent.click(screen.getByRole('button', { name: '08' }));
-    // "15" is both an hour and a minute chip; the minute grid comes second.
-    await userEvent.click(screen.getAllByRole('button', { name: '15' })[1]);
+    const input = await screen.findByTestId('meal-time-input');
+    expect(input).toHaveAttribute('type', 'time');
+    await userEvent.click(input);
+    fireEvent.change(input, { target: { value: '08:15' } });
     expect(setEatenAt).not.toHaveBeenCalled();
-    await userEvent.click(screen.getByRole('button', { name: /done|fertig/i }));
+    await userEvent.tab();
 
     await waitFor(() => expect(setEatenAt).toHaveBeenCalledTimes(1));
     expect(setEatenAt).toHaveBeenCalledWith(7, expect.stringMatching(/^2026-08-30T08:15:00[+-]\d\d:\d\d$/));

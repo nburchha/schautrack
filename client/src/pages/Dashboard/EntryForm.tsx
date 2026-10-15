@@ -9,7 +9,6 @@ import { MACRO_LABELS, computeCaloriesFromMacros } from '@/lib/macros';
 import { parseAmount } from '@/lib/mathParser';
 import { Button } from '@/components/ui/Button';
 import { FoodSearch } from '@/components/FoodSearch/FoodSearch';
-import { TimePicker } from '@/components/ui/TimePicker';
 import { MAX_DRAFT_COMPONENTS, draftName, draftPayload, draftTotals, type DraftComponent } from '@/lib/draft';
 import { formatAmount } from '@/lib/components';
 import { todayIn, toEatenAt } from '@/lib/eatenAt';
@@ -394,13 +393,28 @@ export default function EntryForm({ selectedDate, caloriesEnabled, autoCalcCalor
               value={date}
               onChange={(e) => setDate(e.target.value)}
             />
-            <div data-testid="entry-form-time">
-              <TimePicker
+            <div className="flex items-center gap-1" data-testid="entry-form-time">
+              <input
+                type="time"
+                aria-label={t('entries.timeLabel')}
+                className="rounded-md border border-input bg-muted/50 px-2 py-1.5 text-sm text-foreground outline-none focus:border-ring focus:ring-1 focus:ring-ring"
                 value={time}
-                onChange={(v) => { timeTouched.current = true; setTime(v); }}
-                onClear={() => { timeTouched.current = true; setTime(''); }}
-                label={t('entries.timeLabel')}
+                onChange={(e) => { timeTouched.current = true; setTime(e.target.value); }}
+                data-testid="entry-form-time-input"
               />
+              {time && (
+                <button
+                  type="button"
+                  className="size-7 shrink-0 cursor-pointer rounded-[10px] border border-border text-muted-foreground transition-colors hover:text-foreground"
+                  onClick={() => { timeTouched.current = true; setTime(''); }}
+                  aria-label={t('entries.timeClearLabel')}
+                  data-testid="entry-form-time-clear"
+                >
+                  <svg aria-hidden="true" className="mx-auto" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M18 6L6 18" /><path d="M6 6l12 12" />
+                  </svg>
+                </button>
+              )}
             </div>
           </div>
 

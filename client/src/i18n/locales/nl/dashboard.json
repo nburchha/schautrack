@@ -112,7 +112,8 @@
     "draftFull": "Een maaltijd bevat maximaal {{max}} componenten.",
     "draftGramsLabel": "Gram {{name}}",
     "draftRemoveLabel": "{{name}} verwijderen",
-    "timeLabel": "Tijdstip van eten"
+    "timeLabel": "Tijdstip van eten",
+    "timeClearLabel": "Tijd wissen"
   },
   "foodSearch": {
     "ariaLabel": "Zoek in de voedingsmiddelencatalogus",

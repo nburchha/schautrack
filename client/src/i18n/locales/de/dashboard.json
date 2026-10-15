@@ -112,7 +112,8 @@
     "draftFull": "Ein Eintrag hat höchstens {{max}} Komponenten.",
     "draftGramsLabel": "Gramm von {{name}}",
     "draftRemoveLabel": "{{name}} entfernen",
-    "timeLabel": "Essenszeitpunkt"
+    "timeLabel": "Essenszeitpunkt",
+    "timeClearLabel": "Uhrzeit entfernen"
   },
   "foodSearch": {
     "ariaLabel": "Lebensmittelkatalog durchsuchen",

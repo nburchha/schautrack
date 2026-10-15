@@ -248,11 +248,9 @@ async function pickAndAdd(page: Page, query: string, grams: string, hit?: string
     await page.getByTestId('entry-form-time').scrollIntoViewIfNeeded();
     await wait(page, 1000);
     await still(page, 'new-5-other-day-0900');
-    await page.getByTestId('entry-form-time').getByTestId('time-picker-trigger').click();
+    await page.getByTestId('entry-form-time-input').fill('19:00');
     await wait(page, 800);
-    await still(page, 'new-6-time-picker');
-    await page.getByRole('dialog').last().getByRole('button', { name: '19', exact: true }).click();
-    await page.getByRole('dialog').last().getByRole('button', { name: /done/i }).click();
+    await still(page, 'new-6-time-edited');
     await wait(page, 800);
     await page.locator('form button[type="submit"]').click();
     await page.getByText('Entry tracked').waitFor();
@@ -307,14 +305,10 @@ async function pickAndAdd(page: Page, query: string, grams: string, hit?: string
     await page.getByTestId('meal-component-remove-confirm').click();
     await wait(page, 1500);
 
-    await page.getByTestId('meal-time').getByTestId('time-picker-trigger').click();
-    await wait(page, 800);
-    await page.getByRole('dialog').last().getByRole('button', { name: '08', exact: true }).click();
-    await wait(page, 500);
-    await page.getByRole('dialog').last().getByRole('button', { name: '15', exact: true }).nth(1).click();
+    await page.getByTestId('meal-time-input').fill('08:15');
     await wait(page, 700);
     await still(page, 'edit-3-time');
-    await page.getByRole('dialog').last().getByRole('button', { name: /done/i }).click();
+    await page.getByTestId('meal-time-input').blur();
     await wait(page, 1500);
     await still(page, 'edit-4-after');
   });

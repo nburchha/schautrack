@@ -135,15 +135,13 @@ test.describe('Food search', () => {
     const { context, page } = await loginUser(browser, user.email, user.password);
     await page.goto(`/entries/${mealId}`);
 
-    await page.getByTestId('meal-time').getByTestId('time-picker-trigger').click();
-    await page.getByRole('dialog').getByRole('button', { name: '07', exact: true }).click();
-    // "30" exists only as a minute chip.
-    await page.getByRole('dialog').getByRole('button', { name: '30', exact: true }).click();
-    await page.getByRole('dialog').getByRole('button', { name: /done/i }).click();
+    const input = page.getByTestId('meal-time-input');
+    await input.fill('07:30');
+    await input.blur();
 
-    await expect(page.getByTestId('meal-time').getByTestId('time-picker-trigger')).toHaveText('07:30');
+    await expect(input).toHaveValue('07:30');
     await page.reload();
-    await expect(page.getByTestId('meal-time').getByTestId('time-picker-trigger')).toHaveText('07:30');
+    await expect(page.getByTestId('meal-time-input')).toHaveValue('07:30');
     await context.close();
   });
 });

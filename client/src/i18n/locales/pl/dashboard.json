@@ -118,7 +118,8 @@
     "draftFull": "Posiłek może mieć najwyżej {{max}} składników.",
     "draftGramsLabel": "Gramy: {{name}}",
     "draftRemoveLabel": "Usuń {{name}}",
-    "timeLabel": "Godzina posiłku"
+    "timeLabel": "Godzina posiłku",
+    "timeClearLabel": "Wyczyść godzinę"
   },
   "foodSearch": {
     "ariaLabel": "Szukaj w katalogu produktów",

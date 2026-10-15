@@ -112,7 +112,8 @@
     "draftFull": "Uma refeição tem no máximo {{max}} componentes.",
     "draftGramsLabel": "Gramas de {{name}}",
     "draftRemoveLabel": "Remover {{name}}",
-    "timeLabel": "Hora da refeição"
+    "timeLabel": "Hora da refeição",
+    "timeClearLabel": "Limpar a hora"
   },
   "foodSearch": {
     "ariaLabel": "Pesquisar no catálogo de alimentos",

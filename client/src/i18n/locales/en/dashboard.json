@@ -97,6 +97,7 @@
     "saveAsQuickAddLabel": "Save as quick-add",
     "saveAsTemplateTitle": "Save as template for quick-add",
     "scanBarcodeLabel": "Scan barcode",
+    "timeClearLabel": "Clear time",
     "timeLabel": "Time eaten",
     "toastDeleted": "Entry deleted",
     "toastDeleteFailed": "Failed to delete entry",

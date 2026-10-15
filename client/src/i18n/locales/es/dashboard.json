@@ -112,7 +112,8 @@
     "draftFull": "Una comida admite como máximo {{max}} componentes.",
     "draftGramsLabel": "Gramos de {{name}}",
     "draftRemoveLabel": "Quitar {{name}}",
-    "timeLabel": "Hora de la comida"
+    "timeLabel": "Hora de la comida",
+    "timeClearLabel": "Quitar la hora"
   },
   "foodSearch": {
     "ariaLabel": "Buscar en el catálogo de alimentos",

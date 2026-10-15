@@ -112,7 +112,8 @@
     "draftFull": "Un pasto contiene al massimo {{max}} componenti.",
     "draftGramsLabel": "Grammi di {{name}}",
     "draftRemoveLabel": "Rimuovi {{name}}",
-    "timeLabel": "Ora del pasto"
+    "timeLabel": "Ora del pasto",
+    "timeClearLabel": "Rimuovi l'ora"
   },
   "foodSearch": {
     "ariaLabel": "Cerca nel catalogo degli alimenti",

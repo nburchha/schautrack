@@ -77,9 +77,9 @@ test.describe('Entry form with the food catalog', () => {
     await page.goto('/dashboard');
     await openAddFood(page);
 
-    await expect(page.getByTestId('entry-form-time').getByTestId('time-picker-trigger')).toContainText(/set time/i);
+    await expect(page.getByTestId('entry-form-time-input')).toHaveValue('');
     await page.locator('form input[type="date"]').fill(PAST);
-    await expect(page.getByTestId('entry-form-time').getByTestId('time-picker-trigger')).toHaveText('09:00');
+    await expect(page.getByTestId('entry-form-time-input')).toHaveValue('09:00');
 
     await page.locator('form input[placeholder="Breakfast, snack..."]').fill('Old dinner');
     await page.locator('#entry-calories').fill('650');
@@ -114,10 +114,7 @@ test.describe('Entry form with the food catalog', () => {
     await openAddFood(page);
     await pickFood(page, 'ZyxFlocken', '50');
     await pickFood(page, 'Qjkbanane', '120');
-    await page.getByTestId('entry-form-time').getByTestId('time-picker-trigger').click();
-    await page.getByRole('dialog').last().getByRole('button', { name: '07', exact: true }).click();
-    await page.getByRole('dialog').last().getByRole('button', { name: '30', exact: true }).click();
-    await page.getByRole('dialog').last().getByRole('button', { name: /done/i }).click();
+    await page.getByTestId('entry-form-time-input').fill('07:30');
     await page.locator('form button[type="submit"]').click();
     await expect(page.getByText('Entry tracked')).toBeVisible();
 

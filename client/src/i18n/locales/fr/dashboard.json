@@ -112,7 +112,8 @@
     "draftFull": "Un repas contient au plus {{max}} composants.",
     "draftGramsLabel": "Grammes de {{name}}",
     "draftRemoveLabel": "Retirer {{name}}",
-    "timeLabel": "Heure du repas"
+    "timeLabel": "Heure du repas",
+    "timeClearLabel": "Effacer l'heure"
   },
   "foodSearch": {
     "ariaLabel": "Rechercher dans le catalogue d'aliments",
