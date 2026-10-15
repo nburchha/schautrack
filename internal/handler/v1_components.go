@@ -254,18 +254,48 @@ func (h *V1Handler) finishEntryMutation(w http.ResponseWriter, r *http.Request, 
 	writeV1(w, status, e)
 }
 
+// insertEntryWithComponents creates an entry and its components inside tx and
+// returns the entry id. It leaves the totals to recomputeEntryTotals, which the
+// caller runs before committing. Shared by POST /api/v1/entries and the SPA's
+// POST /entries.
+func insertEntryWithComponents(ctx context.Context, tx pgx.Tx, userID int,
+	inputs []v1ComponentInput, date, name string, eatenAt *time.Time) (int, *apierr.Problem) {
+	if len(inputs) > maxComponentsPerEntry {
+		return 0, apierr.Unprocessable(
+			fmt.Sprintf("An entry holds at most %d components.", maxComponentsPerEntry),
+			apierr.InvalidParam{Name: "components", Reason: "too many"})
+	}
+
+	resolved := make([]*resolvedComponent, len(inputs))
+	for i, in := range inputs {
+		rc, prob := resolveComponent(ctx, tx, userID, in, fmt.Sprintf("components[%d].", i))
+		if prob != nil {
+			return 0, prob
+		}
+		resolved[i] = rc
+	}
+
+	// amount is a placeholder until recomputeEntryTotals runs.
+	var entryID int
+	if err := tx.QueryRow(ctx, `
+		INSERT INTO calorie_entries (user_id, entry_date, amount, entry_name, eaten_at)
+		VALUES ($1, $2, 0, $3, $4) RETURNING id`,
+		userID, date, nilString(name), eatenAt).Scan(&entryID); err != nil {
+		return 0, dbFail("create entry", err)
+	}
+	for _, rc := range resolved {
+		if err := insertComponent(ctx, tx, entryID, rc); err != nil {
+			return 0, dbFail("create component", err)
+		}
+	}
+	return entryID, nil
+}
+
 // createEntryWithComponents is the components branch of POST /entries.
 func (h *V1Handler) createEntryWithComponents(w http.ResponseWriter, r *http.Request,
 	inputs []v1ComponentInput, date, name string, eatenAt *time.Time) {
 	user := v1User(r)
 	ctx := r.Context()
-
-	if len(inputs) > maxComponentsPerEntry {
-		apierr.Write(w, r, apierr.Unprocessable(
-			fmt.Sprintf("An entry holds at most %d components.", maxComponentsPerEntry),
-			apierr.InvalidParam{Name: "components", Reason: "too many"}))
-		return
-	}
 
 	tx, err := h.Pool.Begin(ctx)
 	if err != nil {
@@ -274,30 +304,10 @@ func (h *V1Handler) createEntryWithComponents(w http.ResponseWriter, r *http.Req
 	}
 	defer tx.Rollback(ctx)
 
-	resolved := make([]*resolvedComponent, len(inputs))
-	for i, in := range inputs {
-		rc, prob := resolveComponent(ctx, tx, user.ID, in, fmt.Sprintf("components[%d].", i))
-		if prob != nil {
-			apierr.Write(w, r, prob)
-			return
-		}
-		resolved[i] = rc
-	}
-
-	// amount is a placeholder until recomputeEntryTotals runs below.
-	var entryID int
-	if err := tx.QueryRow(ctx, `
-		INSERT INTO calorie_entries (user_id, entry_date, amount, entry_name, eaten_at)
-		VALUES ($1, $2, 0, $3, $4) RETURNING id`,
-		user.ID, date, nilString(name), eatenAt).Scan(&entryID); err != nil {
-		apierr.Write(w, r, dbFail("create entry", err))
+	entryID, prob := insertEntryWithComponents(ctx, tx, user.ID, inputs, date, name, eatenAt)
+	if prob != nil {
+		apierr.Write(w, r, prob)
 		return
-	}
-	for _, rc := range resolved {
-		if err := insertComponent(ctx, tx, entryID, rc); err != nil {
-			apierr.Write(w, r, dbFail("create component", err))
-			return
-		}
 	}
 	h.finishEntryMutation(w, r, tx, entryID, user.ID, http.StatusCreated, true)
 }

@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"encoding/json"
 	"errors"
 	"fmt"
 	"net/http"
@@ -37,6 +38,7 @@ func (h *EntriesHandler) CreateEntry(w http.ResponseWriter, r *http.Request) {
 
 	entryDate, _ := body["entry_date"].(string)
 	entryDate = strings.TrimSpace(entryDate)
+	explicitDate := entryDate
 	if entryDate == "" {
 		entryDate = service.FormatDateInTz(time.Now(), userTz)
 	}
@@ -44,9 +46,26 @@ func (h *EntriesHandler) CreateEntry(w http.ResponseWriter, r *http.Request) {
 		ErrorJSON(w, http.StatusBadRequest, "Invalid date")
 		return
 	}
+	// eaten_at (RFC 3339) is when the food was eaten. Without it the entry
+	// falls back to its creation time. It decides the day, so an explicit
+	// entry_date must agree with it.
+	var eatenAt *time.Time
+	if v, _ := optionalString(body, "eaten_at"); v != nil && *v != "" {
+		t, day, prob := parseEatenAt(*v, explicitDate, userTz)
+		if prob != nil {
+			writeProblemLegacy(w, prob)
+			return
+		}
+		eatenAt, entryDate = &t, day
+	}
 	// Absent and null both mean "no name"; there is nothing to preserve on a
 	// create, so the two collapse to a NULL entry_name.
 	entryName, _ := optionalEntryName(body, "entry_name")
+
+	if comps, ok := body["components"].([]any); ok && len(comps) > 0 {
+		h.createEntryWithComponents(w, r, body, comps, entryDate, entryName, eatenAt)
+		return
+	}
 
 	// Parse weight (frontend may send as string or number).
 	//
@@ -137,6 +156,12 @@ func (h *EntriesHandler) CreateEntry(w http.ResponseWriter, r *http.Request) {
 		vals := "$1, $2, $3, $4"
 		args := []any{user.ID, entryDate, entryAmount, entryName}
 		idx := 5
+		if eatenAt != nil {
+			cols += ", eaten_at"
+			vals += fmt.Sprintf(", $%d", idx)
+			args = append(args, *eatenAt)
+			idx++
+		}
 		for _, key := range service.MacroKeys {
 			if v, ok := macroValues[key]; ok {
 				cols += ", " + key + "_g"
@@ -195,6 +220,62 @@ func (h *EntriesHandler) CreateEntry(w http.ResponseWriter, r *http.Request) {
 	OkJSON(w)
 }
 
+// createEntryWithComponents is the components branch of POST /entries. The
+// sum is computed from the components, so amount, macros and weight must be
+// left out. The answer carries the new entry's id.
+func (h *EntriesHandler) createEntryWithComponents(w http.ResponseWriter, r *http.Request,
+	body map[string]any, comps []any, entryDate string, entryName *string, eatenAt *time.Time) {
+	for _, key := range append([]string{"amount", "weight", "body_fat"}, macroFieldNames()...) {
+		if v, _ := optionalString(body, key); v != nil && *v != "" {
+			ErrorJSON(w, http.StatusBadRequest, "Calories and macros are computed from the components; leave them out.")
+			return
+		}
+	}
+	raw, err := json.Marshal(comps)
+	var inputs []v1ComponentInput
+	if err != nil || json.Unmarshal(raw, &inputs) != nil {
+		ErrorJSON(w, http.StatusBadRequest, "Invalid components")
+		return
+	}
+	name := ""
+	if entryName != nil {
+		name = *entryName
+	}
+
+	user := middleware.GetCurrentUser(r)
+	ctx := r.Context()
+	tx, err := h.Pool.Begin(ctx)
+	if err != nil {
+		ErrorJSON(w, http.StatusInternalServerError, "Failed to save entry")
+		return
+	}
+	defer tx.Rollback(ctx)
+
+	entryID, prob := insertEntryWithComponents(ctx, tx, user.ID, inputs, entryDate, name, eatenAt)
+	if prob != nil {
+		writeProblemLegacy(w, prob)
+		return
+	}
+	if err := recomputeEntryTotals(ctx, tx, entryID); err != nil {
+		writeProblemLegacy(w, totalsProblem(err))
+		return
+	}
+	if err := tx.Commit(ctx); err != nil {
+		ErrorJSON(w, http.StatusInternalServerError, "Failed to save entry")
+		return
+	}
+	h.Broker.BroadcastEntryChange(user.ID)
+	JSON(w, http.StatusOK, map[string]any{"ok": true, "id": entryID})
+}
+
+func macroFieldNames() []string {
+	out := make([]string, 0, len(service.MacroKeys))
+	for _, key := range service.MacroKeys {
+		out = append(out, key+"_g")
+	}
+	return out
+}
+
 // UpdateEntry handles POST /entries/:id/update
 func (h *EntriesHandler) UpdateEntry(w http.ResponseWriter, r *http.Request) {
 	entryID, err := strconv.Atoi(chi.URLParam(r, "id"))
@@ -220,6 +301,27 @@ func (h *EntriesHandler) UpdateEntry(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// eaten_at moves the entry to that moment, and to that day in the account's
+	// time zone. An explicit null clears it: the entry falls back to its
+	// creation time and keeps its day.
+	if raw, present := body["eaten_at"]; present {
+		if raw == nil {
+			updates = append(updates, fmt.Sprintf("eaten_at = $%d", len(updates)+1))
+			values = append(values, nil)
+		} else {
+			str, _ := raw.(string)
+			t, day, prob := parseEatenAt(strings.TrimSpace(str), "", userTz)
+			if prob != nil {
+				writeProblemLegacy(w, prob)
+				return
+			}
+			updates = append(updates, fmt.Sprintf("eaten_at = $%d", len(updates)+1))
+			values = append(values, t)
+			updates = append(updates, fmt.Sprintf("entry_date = $%d", len(updates)+1))
+			values = append(values, day)
+		}
+	}
+
 	if len(updates) == 0 {
 		ErrorJSON(w, http.StatusBadRequest, "No updates provided")
 		return
@@ -230,7 +332,7 @@ func (h *EntriesHandler) UpdateEntry(w http.ResponseWriter, r *http.Request) {
 	idx := len(updates) + 1
 
 	query := fmt.Sprintf(
-		"UPDATE calorie_entries SET %s WHERE id = $%d AND user_id = $%d RETURNING id, entry_date, amount, entry_name, created_at, protein_g, carbs_g, fat_g, fiber_g, sugar_g",
+		"UPDATE calorie_entries SET %s WHERE id = $%d AND user_id = $%d RETURNING id, entry_date, amount, entry_name, COALESCE(eaten_at, created_at), protein_g, carbs_g, fat_g, fiber_g, sugar_g",
 		strings.Join(updates, ", "), idx, idx+1)
 	values = append(values, entryID, user.ID)
 
@@ -238,7 +340,7 @@ func (h *EntriesHandler) UpdateEntry(w http.ResponseWriter, r *http.Request) {
 	var entryDate string
 	var amount int
 	var entryName *string
-	var createdAt time.Time
+	var eatenAtTime time.Time
 	var proteinG, carbsG, fatG, fiberG, sugarG *int
 
 	// Run the field update and the auto-calc amount update in one
@@ -252,7 +354,7 @@ func (h *EntriesHandler) UpdateEntry(w http.ResponseWriter, r *http.Request) {
 	defer tx.Rollback(r.Context())
 
 	err = tx.QueryRow(r.Context(), query, values...).Scan(
-		&id, &entryDate, &amount, &entryName, &createdAt,
+		&id, &entryDate, &amount, &entryName, &eatenAtTime,
 		&proteinG, &carbsG, &fatG, &fiberG, &sugarG)
 	if err != nil {
 		ErrorJSON(w, http.StatusNotFound, "Entry not found")
@@ -285,7 +387,7 @@ func (h *EntriesHandler) UpdateEntry(w http.ResponseWriter, r *http.Request) {
 
 	payload := map[string]any{
 		"id": id, "date": entryDate, "amount": amount,
-		"time": service.FormatTimeInTz(createdAt, userTz),
+		"time": service.FormatTimeInTz(eatenAtTime, userTz),
 		"name": entryName, "macros": macros,
 	}
 

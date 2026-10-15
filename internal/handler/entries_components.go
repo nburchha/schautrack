@@ -10,6 +10,7 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
 
+	"schautrack/internal/apierr"
 	"schautrack/internal/middleware"
 	"schautrack/internal/model"
 	"schautrack/internal/service"
@@ -122,6 +123,14 @@ func (h *EntriesHandler) mutateComponent(w http.ResponseWriter, r *http.Request,
 		ErrorJSON(w, http.StatusNotFound, "Component not found")
 		return
 	}
+	h.finishEntryWrite(w, r, tx, entryID, http.StatusOK)
+}
+
+// finishEntryWrite recomputes the entry's sum, commits and answers with the
+// fresh entry detail. Shared by every session write that touches components.
+func (h *EntriesHandler) finishEntryWrite(w http.ResponseWriter, r *http.Request, tx pgx.Tx, entryID, status int) {
+	ctx := r.Context()
+	user := middleware.GetCurrentUser(r)
 	if err := recomputeEntryTotals(ctx, tx, entryID); err != nil {
 		var pgErr *pgconn.PgError
 		if errors.As(err, &pgErr) && pgErr.Code == "23514" {
@@ -144,7 +153,93 @@ func (h *EntriesHandler) mutateComponent(w http.ResponseWriter, r *http.Request,
 	}
 	h.Broker.BroadcastEntryChange(user.ID)
 	mu := service.ParseMacroUser(user.MacrosEnabled, user.MacroGoals, user.DailyGoal, user.GoalThreshold)
-	JSON(w, http.StatusOK, entryDetailPayload(e, mu))
+	JSON(w, status, entryDetailPayload(e, mu))
+}
+
+// writeProblemLegacy answers a v1-style problem on the SPA surface, which uses
+// the {"ok": false, "error": ...} shape. The first invalid parameter is spelled
+// out, since the SPA shows the message as a toast.
+func writeProblemLegacy(w http.ResponseWriter, p *apierr.Problem) {
+	msg := p.Detail
+	if len(p.InvalidParams) > 0 {
+		msg = fmt.Sprintf("%s (%s: %s)", p.Detail, p.InvalidParams[0].Name, p.InvalidParams[0].Reason)
+	}
+	ErrorJSON(w, p.Status, msg)
+}
+
+// AddComponent handles POST /entries/{id}/components: one catalog food in
+// grams, or an ad-hoc component with its own values per 100 g. The entry's sum
+// becomes the sum of its components.
+func (h *EntriesHandler) AddComponent(w http.ResponseWriter, r *http.Request) {
+	entryID, ok := model.ParseID(chi.URLParam(r, "id"))
+	if !ok {
+		ErrorJSON(w, http.StatusBadRequest, "Invalid entry id")
+		return
+	}
+	var in v1ComponentInput
+	if err := ReadJSON(r, &in); err != nil {
+		ErrorJSON(w, http.StatusBadRequest, "Invalid request body")
+		return
+	}
+	user := middleware.GetCurrentUser(r)
+	ctx := r.Context()
+
+	tx, err := lockUserEntry(ctx, h.Pool, entryID, user.ID)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			ErrorJSON(w, http.StatusNotFound, "Entry not found")
+			return
+		}
+		ErrorJSON(w, http.StatusInternalServerError, "Failed to add component")
+		return
+	}
+	defer tx.Rollback(ctx)
+
+	rc, prob := resolveComponent(ctx, tx, user.ID, in, "")
+	if prob != nil {
+		writeProblemLegacy(w, prob)
+		return
+	}
+	var count int
+	if err := tx.QueryRow(ctx,
+		"SELECT COUNT(*)::int FROM entry_components WHERE entry_id = $1", entryID).Scan(&count); err != nil {
+		ErrorJSON(w, http.StatusInternalServerError, "Failed to add component")
+		return
+	}
+	if count >= maxComponentsPerEntry {
+		ErrorJSON(w, http.StatusConflict, fmt.Sprintf("An entry holds at most %d components.", maxComponentsPerEntry))
+		return
+	}
+	if err := insertComponent(ctx, tx, entryID, rc); err != nil {
+		ErrorJSON(w, http.StatusInternalServerError, "Failed to add component")
+		return
+	}
+	h.finishEntryWrite(w, r, tx, entryID, http.StatusCreated)
+}
+
+// SearchFoods handles GET /api/foods/search?q=: the catalog (global foods and
+// the caller's own), ranked like GET /api/v1/foods/search.
+func (h *EntriesHandler) SearchFoods(w http.ResponseWriter, r *http.Request) {
+	q, prob := normalizeSearchQuery(r.URL.Query().Get("q"))
+	if prob != nil {
+		writeProblemLegacy(w, prob)
+		return
+	}
+	limit := 20
+	if raw := r.URL.Query().Get("limit"); raw != "" {
+		n, err := strconv.Atoi(raw)
+		if err != nil || n < 1 {
+			ErrorJSON(w, http.StatusBadRequest, "limit must be a positive integer")
+			return
+		}
+		limit = min(n, maxSearchLimit)
+	}
+	foods, err := searchFoods(r.Context(), h.Pool, middleware.GetCurrentUser(r).ID, q, limit)
+	if err != nil {
+		ErrorJSON(w, http.StatusInternalServerError, "Failed to search foods")
+		return
+	}
+	JSON(w, http.StatusOK, map[string]any{"ok": true, "foods": foods})
 }
 
 // UpdateComponent handles POST /entries/{id}/components/{cid}/update. Only the

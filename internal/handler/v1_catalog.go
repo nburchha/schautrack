@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"net/http"
@@ -71,19 +72,11 @@ func likeEscape(s string) string {
 // sides, so "Haferflocken" finds the BLS's "Hafer Flocken"; ties go to the caller's
 // own foods, then to shorter names.
 func (h *V1Handler) SearchFoodsV1(w http.ResponseWriter, r *http.Request) {
-	q := strings.TrimSpace(r.URL.Query().Get("q"))
-	if strings.ContainsRune(q, 0) {
-		// Postgres TEXT cannot hold NUL; refuse it here, as decodeV1 does for bodies.
-		apierr.Write(w, r, apierr.BadRequest("Text fields cannot contain NUL characters."))
+	q, prob := normalizeSearchQuery(r.URL.Query().Get("q"))
+	if prob != nil {
+		apierr.Write(w, r, prob)
 		return
 	}
-	if len([]rune(q)) < minSearchQuery {
-		apierr.Write(w, r, apierr.Unprocessable(
-			fmt.Sprintf(`"q" needs at least %d characters.`, minSearchQuery),
-			apierr.InvalidParam{Name: "q", Reason: "too short"}))
-		return
-	}
-	q = truncateUTF8(q, maxSearchQuery)
 
 	limit, prob := queryLimit(r)
 	if prob != nil {
@@ -94,9 +87,35 @@ func (h *V1Handler) SearchFoodsV1(w http.ResponseWriter, r *http.Request) {
 		limit = maxSearchLimit
 	}
 
-	user := v1User(r)
+	out, err := searchFoods(r.Context(), h.Pool, v1User(r).ID, q, limit)
+	if err != nil {
+		apierr.Write(w, r, dbFail("search foods", err))
+		return
+	}
+	writeV1(w, http.StatusOK, v1List[v1Food]{Data: out})
+}
+
+// normalizeSearchQuery trims and bounds a search term. Shared by the v1 and
+// the session search so both refuse the same inputs.
+func normalizeSearchQuery(raw string) (string, *apierr.Problem) {
+	q := strings.TrimSpace(raw)
+	if strings.ContainsRune(q, 0) {
+		// Postgres TEXT cannot hold NUL; refuse it here, as decodeV1 does for bodies.
+		return "", apierr.BadRequest("Text fields cannot contain NUL characters.")
+	}
+	if len([]rune(q)) < minSearchQuery {
+		return "", apierr.Unprocessable(
+			fmt.Sprintf(`"q" needs at least %d characters.`, minSearchQuery),
+			apierr.InvalidParam{Name: "q", Reason: "too short"})
+	}
+	return truncateUTF8(q, maxSearchQuery), nil
+}
+
+// searchFoods runs the catalog search for one account: global foods plus its
+// own. q must come from normalizeSearchQuery.
+func searchFoods(ctx context.Context, db querier, userID int, q string, limit int) ([]v1Food, error) {
 	compact := strings.Join(strings.Fields(q), "")
-	rows, err := h.Pool.Query(r.Context(), `
+	rows, err := db.Query(ctx, `
 		SELECT `+foodSelect+`
 		FROM foods
 		WHERE (user_id IS NULL OR user_id = $2)
@@ -110,11 +129,10 @@ func (h *V1Handler) SearchFoodsV1(w http.ResponseWriter, r *http.Request) {
 		         length(name),
 		         id
 		LIMIT $4`,
-		q, user.ID, likeEscape(q), limit,
+		q, userID, likeEscape(q), limit,
 		likeEscape(compact), compact)
 	if err != nil {
-		apierr.Write(w, r, dbFail("search foods", err))
-		return
+		return nil, err
 	}
 	defer rows.Close()
 
@@ -122,16 +140,11 @@ func (h *V1Handler) SearchFoodsV1(w http.ResponseWriter, r *http.Request) {
 	for rows.Next() {
 		f, err := scanFood(rows)
 		if err != nil {
-			apierr.Write(w, r, dbFail("scan food", err))
-			return
+			return nil, err
 		}
 		out = append(out, *f)
 	}
-	if err := rows.Err(); err != nil {
-		apierr.Write(w, r, dbFail("iterate foods", err))
-		return
-	}
-	writeV1(w, http.StatusOK, v1List[v1Food]{Data: out})
+	return out, rows.Err()
 }
 
 type v1FoodInput struct {
