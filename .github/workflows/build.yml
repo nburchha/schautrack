@@ -889,10 +889,13 @@ jobs:
   publish-helm:
     runs-on: ubuntu-latest
     needs: [compute-version, create-manifest]
+    # DISABLED: no Kubernetes cluster in use right now, the image is pulled
+    # straight from ghcr.io. Remove `false &&` to re-enable the chart release.
+    #
     # Never package/publish the chart from PR context: for PRs compute-version
     # emits an 8-char SHA that is not valid semver (helm package would reject it),
     # and gh-pages must only be written by push events on main/staging.
-    if: github.event_name == 'push'
+    if: false && github.event_name == 'push'
     # gh-pages is a single branch mutated by a plain `git push` with no rebase or
     # retry, so two concurrent publishes mean one push is rejected
     # non-fast-forward and that chart is lost. The group is repository-wide, not
@@ -1038,7 +1041,9 @@ jobs:
   notify-argocd:
     runs-on: ${{ github.ref == 'refs/heads/staging' && 'arc-runner' || 'ubuntu-latest' }}
     needs: [compute-version, publish-helm]
-    if: github.ref == 'refs/heads/main' || github.ref == 'refs/heads/staging'
+    # DISABLED together with publish-helm (no ArgoCD / cluster right now).
+    # Remove `false &&` to re-enable the deploy nudge.
+    if: false && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/staging')
     # One deploy nudge per ref is enough. This job waits up to 15 minutes for
     # GitHub Pages and then refreshes a single ArgoCD application; in a merge
     # burst only the newest chart is worth deploying, and serialising per ref
