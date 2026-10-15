@@ -109,11 +109,32 @@
     "openMeal": "Details zu {{name}} öffnen",
     "openMealTitle": "Komponenten und Makros anzeigen"
   },
+  "foodSearch": {
+    "ariaLabel": "Lebensmittelkatalog durchsuchen",
+    "back": "Anderes Lebensmittel",
+    "error": "Die Suche ist fehlgeschlagen.",
+    "gramsLabel": "Gramm von {{name}}",
+    "hint": "Gib mindestens {{min}} Buchstaben ein.",
+    "invalidGrams": "Gib {{min}} bis {{max}} Gramm ein.",
+    "noKcal": "Kein Kalorienwert",
+    "noResults": "Keine Lebensmittel zu „{{q}}“ gefunden.",
+    "per100g": "{{kcal}} kcal / 100 g",
+    "placeholder": "Lebensmittel suchen, z. B. Haferflocken",
+    "portionKcal": "{{kcal}} kcal",
+    "retry": "Erneut versuchen",
+    "source": {
+      "bls": "BLS",
+      "off": "OFF",
+      "own": "Eigenes"
+    }
+  },
   "meal": {
     "addPage": {
       "back": "Zurück zur Mahlzeit",
-      "soon": "Die Lebensmittelsuche kommt bald. Hier baust du die Mahlzeit dann aus dem Katalog auf.",
-      "title": "Komponente hinzufügen"
+      "title": "Komponente hinzufügen",
+      "add": "Hinzufügen",
+      "toastAdded": "{{name}} hinzugefügt",
+      "toastFailed": "Komponente konnte nicht hinzugefügt werden"
     },
     "back": "Zurück zum Tag",
     "components": {
@@ -146,7 +167,9 @@
     },
     "toastDeleteFailed": "Komponente konnte nicht entfernt werden",
     "toastUpdateFailed": "Menge konnte nicht geändert werden",
-    "untitled": "Mahlzeit"
+    "untitled": "Mahlzeit",
+    "timeLabel": "Essenszeitpunkt",
+    "toastTimeFailed": "Uhrzeit konnte nicht geändert werden"
   },
   "notes": {
     "sectionTitle": "Notizen",

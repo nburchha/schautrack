@@ -109,11 +109,32 @@
     "openMeal": "Details van {{name}} openen",
     "openMealTitle": "Componenten en macro's tonen"
   },
+  "foodSearch": {
+    "ariaLabel": "Zoek in de voedingsmiddelencatalogus",
+    "back": "Ander product",
+    "error": "Zoeken is mislukt.",
+    "gramsLabel": "Gram {{name}}",
+    "hint": "Typ minstens {{min}} letters.",
+    "invalidGrams": "Voer tussen {{min}} en {{max}} gram in.",
+    "noKcal": "Geen caloriewaarde",
+    "noResults": "Geen producten gevonden voor “{{q}}”.",
+    "per100g": "{{kcal}} kcal / 100 g",
+    "placeholder": "Zoek producten, bv. havermout",
+    "portionKcal": "{{kcal}} kcal",
+    "retry": "Opnieuw proberen",
+    "source": {
+      "bls": "BLS",
+      "off": "OFF",
+      "own": "Eigen"
+    }
+  },
   "meal": {
     "addPage": {
       "back": "Terug naar de maaltijd",
-      "soon": "Zoeken naar voedingsmiddelen komt binnenkort. Hier stel je deze maaltijd samen uit de catalogus.",
-      "title": "Component toevoegen"
+      "title": "Component toevoegen",
+      "add": "Toevoegen",
+      "toastAdded": "{{name}} toegevoegd",
+      "toastFailed": "Component kon niet worden toegevoegd"
     },
     "back": "Terug naar de dag",
     "components": {
@@ -146,7 +167,9 @@
     },
     "toastDeleteFailed": "Component verwijderen mislukt",
     "toastUpdateFailed": "Hoeveelheid wijzigen mislukt",
-    "untitled": "Maaltijd"
+    "untitled": "Maaltijd",
+    "timeLabel": "Tijdstip van eten",
+    "toastTimeFailed": "Tijd kon niet worden gewijzigd"
   },
   "notes": {
     "sectionTitle": "Notities",

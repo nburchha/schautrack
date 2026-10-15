@@ -3,11 +3,13 @@ import { Link, useParams, useSearchParams } from 'react-router';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
 import { useRequireAuth } from '@/hooks/useAuth';
-import { deleteComponent, getEntry, updateComponentGrams, type EntryDetailResponse } from '@/api/entries';
+import { deleteComponent, getEntry, setEatenAt, updateComponentGrams, type EntryDetailResponse } from '@/api/entries';
 import { useDashboardStore } from '@/stores/dashboardStore';
 import { useToastStore } from '@/stores/toastStore';
 import { kcalShares } from '@/lib/components';
 import { formatDate } from '@/lib/format';
+import { localTimeOf, toEatenAt } from '@/lib/eatenAt';
+import { TimePicker } from '@/components/ui/TimePicker';
 import { QueryError } from '@/components/ui/QueryError';
 import { SectionLabel } from '@/components/ui/SectionLabel';
 import { Button } from '@/components/ui/Button';
@@ -24,6 +26,7 @@ export default function Meal() {
   const [searchParams] = useSearchParams();
   const currentLabel = useDashboardStore((s) => s.currentLabel);
   const [busy, setBusy] = useState(false);
+  const [timeDraft, setTimeDraft] = useState<string | null>(null);
 
   const entryId = Number(id);
   // ?user= is only set when the list was showing a linked account's day.
@@ -54,6 +57,23 @@ export default function Meal() {
       afterWrite(await action());
     } catch (err) {
       addToast('error', err instanceof Error ? err.message : failure);
+    }
+    setBusy(false);
+  };
+
+  // The picker reports every tap; the write happens once, when it closes.
+  const saveTime = async (entry: EntryDetailResponse['entry']) => {
+    const draft = timeDraft;
+    setTimeDraft(null);
+    if (!draft || draft === localTimeOf(entry.eaten_at, user?.timezone)) return;
+    setBusy(true);
+    try {
+      await setEatenAt(entry.id, toEatenAt(entry.date, draft, user?.timezone));
+      await queryClient.invalidateQueries({ queryKey });
+      queryClient.invalidateQueries({ queryKey: ['dashboard'] });
+      queryClient.invalidateQueries({ queryKey: ['day-entries'] });
+    } catch (err) {
+      addToast('error', err instanceof Error ? err.message : t('meal.toastTimeFailed'));
     }
     setBusy(false);
   };
@@ -100,10 +120,25 @@ export default function Meal() {
           </h1>
           <p className="mt-1 text-sm text-muted-foreground">
             <span className="tabular-nums">{formatDate(`${entry.date}T00:00:00`, undefined, { weekday: 'short', month: 'short', day: 'numeric' })}</span>
-            {' · '}
-            <span className="tabular-nums">{entry.local_time}</span>
-            {!canEdit && <> · {t('meal.sharedBy', { label: currentLabel })}</>}
+            {!canEdit && (
+              <>
+                {' · '}
+                <span className="tabular-nums">{entry.local_time}</span>
+                {' · '}
+                {t('meal.sharedBy', { label: currentLabel })}
+              </>
+            )}
           </p>
+          {canEdit && (
+            <div className="mt-2" data-testid="meal-time">
+              <TimePicker
+                value={timeDraft ?? localTimeOf(entry.eaten_at, user?.timezone)}
+                onChange={setTimeDraft}
+                onClose={() => void saveTime(entry)}
+                label={t('meal.timeLabel')}
+              />
+            </div>
+          )}
         </div>
       </header>
 

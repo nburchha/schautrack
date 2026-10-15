@@ -67,3 +67,19 @@ export function updateComponentGrams(entryId: number, componentId: number, grams
 export function deleteComponent(entryId: number, componentId: number) {
   return api<EntryDetailResponse>(`/api/entries/${entryId}/components/${componentId}/delete`, { method: 'POST' });
 }
+
+/** Adds a catalog food, in grams, to an entry. The entry's sum becomes the sum of its components. */
+export function addComponent(entryId: number, input: { food_id: number; grams: number }) {
+  return api<EntryDetailResponse>(`/api/entries/${entryId}/components`, {
+    method: 'POST',
+    body: JSON.stringify(input),
+  });
+}
+
+/**
+ * Moves an entry to the moment it was eaten (RFC 3339 with offset), which also
+ * sets its day. null falls back to the time the entry was created.
+ */
+export function setEatenAt(entryId: number, eatenAt: string | null) {
+  return updateEntry(entryId, { eaten_at: eatenAt });
+}

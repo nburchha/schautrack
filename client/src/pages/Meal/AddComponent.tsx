@@ -1,12 +1,35 @@
-import { Link, useParams } from 'react-router';
+import { Link, useNavigate, useParams } from 'react-router';
+import { useQueryClient } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
+import { addComponent } from '@/api/entries';
+import { FoodSearch } from '@/components/FoodSearch/FoodSearch';
+import { useToastStore } from '@/stores/toastStore';
+import type { Food } from '@/types';
 
-// Placeholder for the food search. The meal page links here today so the route
-// exists; the catalog search (work package 4) plugs into this page later and
-// adds the chosen food to the entry.
+// Search the catalog, pick a food, enter grams: the food becomes a component of
+// this meal and its totals are recomputed by the server.
 export default function AddComponent() {
   const { t } = useTranslation('dashboard');
   const { id } = useParams();
+  const navigate = useNavigate();
+  const queryClient = useQueryClient();
+  const addToast = useToastStore((s) => s.addToast);
+  const entryId = Number(id);
+
+  const add = async (food: Food, grams: number) => {
+    try {
+      const res = await addComponent(entryId, { food_id: food.id, grams });
+      // The meal page reads this key (own entry, no ?user=).
+      queryClient.setQueryData(['entry', entryId, null], res);
+      queryClient.invalidateQueries({ queryKey: ['dashboard'] });
+      queryClient.invalidateQueries({ queryKey: ['day-entries'] });
+      addToast('success', t('meal.addPage.toastAdded', { name: food.name }));
+      navigate(`/entries/${id}`);
+    } catch (err) {
+      addToast('error', err instanceof Error ? err.message : t('meal.addPage.toastFailed'));
+      throw err;
+    }
+  };
 
   return (
     <div className="flex flex-col gap-3">
@@ -23,8 +46,8 @@ export default function AddComponent() {
         </Link>
         <h1 className="m-0 font-display text-2xl font-bold text-foreground">{t('meal.addPage.title')}</h1>
       </header>
-      <section className="surface p-6 text-center" data-testid="add-component-placeholder">
-        <p className="m-0 text-sm text-muted-foreground">{t('meal.addPage.soon')}</p>
+      <section className="surface p-4" data-testid="add-component">
+        <FoodSearch onPick={add} pickLabel={t('meal.addPage.add')} autoFocus />
       </section>
     </div>
   );

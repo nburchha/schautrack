@@ -115,11 +115,32 @@
     "openMeal": "Otwórz szczegóły: {{name}}",
     "openMealTitle": "Pokaż składniki i makroskładniki"
   },
+  "foodSearch": {
+    "ariaLabel": "Szukaj w katalogu produktów",
+    "back": "Inny produkt",
+    "error": "Wyszukiwanie nie powiodło się.",
+    "gramsLabel": "Gramy: {{name}}",
+    "hint": "Wpisz co najmniej {{min}} litery.",
+    "invalidGrams": "Podaj od {{min}} do {{max}} gramów.",
+    "noKcal": "Brak wartości kalorycznej",
+    "noResults": "Nie znaleziono produktów dla „{{q}}”.",
+    "per100g": "{{kcal}} kcal / 100 g",
+    "placeholder": "Szukaj produktów, np. płatki owsiane",
+    "portionKcal": "{{kcal}} kcal",
+    "retry": "Spróbuj ponownie",
+    "source": {
+      "bls": "BLS",
+      "off": "OFF",
+      "own": "Własny"
+    }
+  },
   "meal": {
     "addPage": {
       "back": "Wróć do posiłku",
-      "soon": "Wyszukiwarka produktów wkrótce. Tutaj zbudujesz ten posiłek z katalogu.",
-      "title": "Dodaj składnik"
+      "title": "Dodaj składnik",
+      "add": "Dodaj",
+      "toastAdded": "Dodano: {{name}}",
+      "toastFailed": "Nie udało się dodać składnika"
     },
     "back": "Wróć do dnia",
     "components": {
@@ -152,7 +173,9 @@
     },
     "toastDeleteFailed": "Nie udało się usunąć składnika",
     "toastUpdateFailed": "Nie udało się zmienić ilości",
-    "untitled": "Posiłek"
+    "untitled": "Posiłek",
+    "timeLabel": "Godzina posiłku",
+    "toastTimeFailed": "Nie udało się zmienić godziny"
   },
   "notes": {
     "sectionTitle": "Notatki",
