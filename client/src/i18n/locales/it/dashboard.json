@@ -107,7 +107,12 @@
     "componentCount_one": "{{count}} componente",
     "componentCount_other": "{{count}} componenti",
     "openMeal": "Apri i dettagli di {{name}}",
-    "openMealTitle": "Mostra componenti e macro"
+    "openMealTitle": "Mostra componenti e macro",
+    "addToDraft": "Aggiungi",
+    "draftFull": "Un pasto contiene al massimo {{max}} componenti.",
+    "draftGramsLabel": "Grammi di {{name}}",
+    "draftRemoveLabel": "Rimuovi {{name}}",
+    "timeLabel": "Ora del pasto"
   },
   "foodSearch": {
     "ariaLabel": "Cerca nel catalogo degli alimenti",

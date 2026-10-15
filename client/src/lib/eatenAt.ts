@@ -63,3 +63,13 @@ export function localTimeOf(iso: string, tz: string | null | undefined): string 
     hour: '2-digit', minute: '2-digit',
   }).format(new Date(iso));
 }
+
+/** Today's calendar date (YYYY-MM-DD) in `tz`. */
+export function todayIn(tz: string | null | undefined): string {
+  return new Intl.DateTimeFormat('en-CA', { timeZone: safeZone(tz) }).format(new Date());
+}
+
+/** The calendar date (YYYY-MM-DD) of an RFC 3339 instant in `tz`. */
+export function localDateOf(iso: string, tz: string | null | undefined): string {
+  return new Intl.DateTimeFormat('en-CA', { timeZone: safeZone(tz) }).format(new Date(iso));
+}

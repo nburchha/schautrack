@@ -107,7 +107,12 @@
     "componentCount_one": "{{count}} component",
     "componentCount_other": "{{count}} componenten",
     "openMeal": "Details van {{name}} openen",
-    "openMealTitle": "Componenten en macro's tonen"
+    "openMealTitle": "Componenten en macro's tonen",
+    "addToDraft": "Toevoegen",
+    "draftFull": "Een maaltijd bevat maximaal {{max}} componenten.",
+    "draftGramsLabel": "Gram {{name}}",
+    "draftRemoveLabel": "{{name}} verwijderen",
+    "timeLabel": "Tijdstip van eten"
   },
   "foodSearch": {
     "ariaLabel": "Zoek in de voedingsmiddelencatalogus",

@@ -107,7 +107,12 @@
     "componentCount_one": "{{count}} Komponente",
     "componentCount_other": "{{count}} Komponenten",
     "openMeal": "Details zu {{name}} öffnen",
-    "openMealTitle": "Komponenten und Makros anzeigen"
+    "openMealTitle": "Komponenten und Makros anzeigen",
+    "addToDraft": "Hinzufügen",
+    "draftFull": "Ein Eintrag hat höchstens {{max}} Komponenten.",
+    "draftGramsLabel": "Gramm von {{name}}",
+    "draftRemoveLabel": "{{name}} entfernen",
+    "timeLabel": "Essenszeitpunkt"
   },
   "foodSearch": {
     "ariaLabel": "Lebensmittelkatalog durchsuchen",
