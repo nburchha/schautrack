@@ -3,7 +3,8 @@ import { psql, createIsolatedUser, loginUser } from './fixtures/helpers';
 
 // The catalog search on the add-component page: type, see hits update, pick a
 // food, enter grams, and watch the meal's totals follow. Foods are seeded as
-// the user's own so the spec does not depend on the BLS import.
+// the user's own, under made-up names, so the spec neither depends on the BLS
+// import nor changes when it has been run.
 
 const TODAY = new Date().toLocaleDateString('en-CA', { timeZone: 'UTC' });
 
@@ -23,10 +24,10 @@ test.describe('Food search', () => {
   test.beforeAll(() => {
     user = createIsolatedUser('food-search');
     stranger = createIsolatedUser('food-search-stranger');
-    seedFood(user.id, 'Hafer Flocken Zart', 372, 13.5);
-    seedFood(user.id, 'Haferdrink', 45, 1);
-    seedFood(user.id, 'Banane roh', 90, 1.1);
-    seedFood(stranger.id, 'Haferbrei Geheim', 100, 3);
+    seedFood(user.id, 'Zyx Flocken Zart', 372, 13.5);
+    seedFood(user.id, 'Zyxdrink', 45, 1);
+    seedFood(user.id, 'Qjk banane roh', 90, 1.1);
+    seedFood(stranger.id, 'Zwv brei Geheim', 100, 3);
 
     mealId = psql(
       `INSERT INTO calorie_entries (user_id, entry_date, entry_name, amount) VALUES (${user.id}, '${TODAY}', 'Porridge', 0) RETURNING id`,
@@ -51,17 +52,17 @@ test.describe('Food search', () => {
     await page.goto(`/entries/${mealId}/add`);
 
     const input = page.getByTestId('food-search-input');
-    await input.pressSequentially('h');
+    await input.pressSequentially('z');
     await expect(page.getByTestId('food-search-hint')).toBeVisible();
     await expect(page.getByTestId('food-search-result')).toHaveCount(0);
 
-    await input.pressSequentially('afer');
+    await input.pressSequentially('yx');
     await expect(page.getByTestId('food-search-result')).toHaveCount(2);
 
-    // "Haferflocken" has no space; the catalog name does.
-    await input.fill('Haferflocken');
+    // "ZyxFlocken" has no space; the catalog name does.
+    await input.fill('ZyxFlocken');
     await expect(page.getByTestId('food-search-result')).toHaveCount(1);
-    await expect(page.getByTestId('food-search-result')).toContainText('Hafer Flocken Zart');
+    await expect(page.getByTestId('food-search-result')).toContainText('Zyx Flocken Zart');
     await expect(page.getByTestId('food-search-result')).toContainText('372 kcal / 100 g');
 
     await input.fill('zzzzzz');
@@ -73,7 +74,7 @@ test.describe('Food search', () => {
     const { context, page } = await loginUser(browser, user.email, user.password);
     await page.goto(`/entries/${mealId}/add`);
 
-    await page.getByTestId('food-search-input').fill('Haferbrei');
+    await page.getByTestId('food-search-input').fill('Zwvbrei');
     await expect(page.getByTestId('food-search-empty')).toBeVisible();
     await context.close();
   });
@@ -84,7 +85,7 @@ test.describe('Food search', () => {
     await expect(page.getByTestId('meal-component')).toHaveCount(1);
 
     await page.getByTestId('meal-add-component').click();
-    await page.getByTestId('food-search-input').fill('Banane');
+    await page.getByTestId('food-search-input').fill('Qjkbanane');
     await page.getByTestId('food-search-result').click();
 
     await expect(page.getByTestId('food-search-grams')).toHaveValue('100');
@@ -107,7 +108,7 @@ test.describe('Food search', () => {
     const { context, page } = await loginUser(browser, user.email, user.password);
     await page.goto(`/entries/${directId}/add`);
 
-    await page.getByTestId('food-search-input').fill('Haferdrink');
+    await page.getByTestId('food-search-input').fill('Zyxdrink');
     await page.getByTestId('food-search-result').click();
     await page.getByTestId('food-search-grams').fill('200');
     await page.getByTestId('food-search-add').click();
@@ -121,7 +122,7 @@ test.describe('Food search', () => {
     const { context, page } = await loginUser(browser, user.email, user.password);
     await page.goto(`/entries/${mealId}/add`);
 
-    await page.getByTestId('food-search-input').fill('Banane');
+    await page.getByTestId('food-search-input').fill('Qjkbanane');
     await page.getByTestId('food-search-result').click();
     for (const bad of ['0', '20000', 'abc']) {
       await page.getByTestId('food-search-grams').fill(bad);

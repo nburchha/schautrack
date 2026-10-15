@@ -3,8 +3,8 @@ import { psql, createIsolatedUser, loginUser, openAddFood } from './fixtures/hel
 
 // Tracking from the catalog: search foods inside the add-food form, build a
 // meal from them with grams, pick when it was eaten, and undo a delete that
-// carried components. Foods are seeded as the user's own so the spec does not
-// depend on the BLS import.
+// carried components. Foods are seeded as the user's own under made-up names,
+// so the spec neither depends on the BLS import nor changes when it has been run.
 
 const TODAY = new Date().toLocaleDateString('en-CA', { timeZone: 'UTC' });
 const PAST = '2026-01-15';
@@ -29,8 +29,8 @@ async function pickFood(page: import('@playwright/test').Page, query: string, gr
 test.describe('Entry form with the food catalog', () => {
   test.beforeAll(() => {
     user = createIsolatedUser('entry-catalog');
-    seedFood('Hafer Flocken Zart', 372, 13.5);
-    seedFood('Banane roh', 90, 1.1);
+    seedFood('Zyx Flocken Zart', 372, 13.5);
+    seedFood('Qjk banane roh', 90, 1.1);
   });
 
   test.beforeEach(() => {
@@ -48,8 +48,8 @@ test.describe('Entry form with the food catalog', () => {
     await page.goto('/dashboard');
     await openAddFood(page);
 
-    await pickFood(page, 'Haferflocken', '50');
-    await pickFood(page, 'Banane', '120');
+    await pickFood(page, 'ZyxFlocken', '50');
+    await pickFood(page, 'Qjkbanane', '120');
 
     await expect(page.getByTestId('draft-component')).toHaveCount(2);
     // 50 g oats (186) + 120 g banana (108); the totals are read-only.
@@ -63,7 +63,7 @@ test.describe('Entry form with the food catalog', () => {
     await page.locator('form button[type="submit"]').click();
     await expect(page.getByText('Entry tracked')).toBeVisible();
 
-    const row = page.getByTestId('entry-row').filter({ hasText: 'Hafer Flocken Zart, Banane roh' });
+    const row = page.getByTestId('entry-row').filter({ hasText: 'Zyx Flocken Zart, Qjk banane roh' });
     await expect(row.getByTestId('entry-component-count')).toHaveText('2 components');
     await expect(row).toContainText('480');
 
@@ -112,8 +112,8 @@ test.describe('Entry form with the food catalog', () => {
     const { context, page } = await loginUser(browser, user.email, user.password);
     await page.goto('/dashboard');
     await openAddFood(page);
-    await pickFood(page, 'Haferflocken', '50');
-    await pickFood(page, 'Banane', '120');
+    await pickFood(page, 'ZyxFlocken', '50');
+    await pickFood(page, 'Qjkbanane', '120');
     await page.getByTestId('entry-form-time').getByTestId('time-picker-trigger').click();
     await page.getByRole('dialog').last().getByRole('button', { name: '07', exact: true }).click();
     await page.getByRole('dialog').last().getByRole('button', { name: '30', exact: true }).click();
