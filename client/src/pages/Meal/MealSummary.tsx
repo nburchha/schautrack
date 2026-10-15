@@ -37,6 +37,7 @@ export default function MealSummary({ entry, caloriesEnabled }: Props) {
   const totals = entryMacroTotals(entry.macros);
   const sums = sumMacros(entry.components);
   const split = energySplit(totals);
+  const anyIncomplete = MACRO_KEYS.some((k) => isIncomplete(sums[k]));
 
   return (
     <section className="surface flex flex-col gap-5 p-5" aria-label={t('meal.summary.title')}>
@@ -85,7 +86,7 @@ export default function MealSummary({ entry, caloriesEnabled }: Props) {
         </div>
       </div>
 
-      <dl className="grid grid-cols-2 gap-2 sm:grid-cols-5">
+      <dl className="m-0 grid grid-cols-2 gap-2 sm:grid-cols-5">
         {MACRO_KEYS.map((key) => (
           <MacroTile
             key={key}
@@ -98,6 +99,11 @@ export default function MealSummary({ entry, caloriesEnabled }: Props) {
           />
         ))}
       </dl>
+      {anyIncomplete && entry.components.length > 0 && (
+        <p className="m-0 text-xs text-muted-foreground">
+          <span className="font-bold text-warning">≥</span> {t('meal.summary.incompleteNote')}
+        </p>
+      )}
     </section>
   );
 }
@@ -119,7 +125,7 @@ function MacroTile({ macroKey, value, known, total, incomplete, components }: {
 
   return (
     <div
-      className="flex min-w-0 flex-col gap-0.5 rounded-[14px] border border-white/[0.07] bg-white/[0.03] px-3 py-2.5"
+      className="flex min-w-0 flex-col gap-0.5 last:col-span-2 sm:last:col-span-1 rounded-[14px] border border-white/[0.07] bg-white/[0.03] px-3 py-2.5"
       title={hint}
       data-testid={`meal-total-${macroKey}`}
     >

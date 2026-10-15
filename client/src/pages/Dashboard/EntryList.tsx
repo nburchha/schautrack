@@ -188,11 +188,6 @@ function EntryRow({ entry, canEdit, enabledMacros, caloriesEnabled, autoCalcCalo
             </button>
           )}
         </span>
-        {componentCount > 0 && (
-          <span className="shrink-0 rounded-full border border-white/10 px-2 py-px text-[11px] text-muted-foreground" data-testid="entry-component-count">
-            {t('entries.componentCount', { count: componentCount })}
-          </span>
-        )}
         <span className="text-xs text-muted-foreground tabular-nums shrink-0 opacity-85">{entry.time}</span>
         {canEdit && entry.name && (
           <button
@@ -233,8 +228,8 @@ function EntryRow({ entry, canEdit, enabledMacros, caloriesEnabled, autoCalcCalo
       </div>
 
       {/* Row 2: Macro pills */}
-      {hasMacros && (
-        <div className="flex flex-wrap gap-1.5 px-1 pb-2">
+      {(hasMacros || componentCount > 0) && (
+        <div className="flex flex-wrap items-center gap-1.5 px-1 pb-2">
           {caloriesEnabled && (
             editing === 'amount' ? (
               <MacroPillEditing
@@ -284,6 +279,11 @@ function EntryRow({ entry, canEdit, enabledMacros, caloriesEnabled, autoCalcCalo
               />
             );
           })}
+          {componentCount > 0 && (
+            <span className="rounded-full border border-white/10 px-2 py-px text-[11px] text-muted-foreground" data-testid="entry-component-count">
+              {t('entries.componentCount', { count: componentCount })}
+            </span>
+          )}
         </div>
       )}
     </div>

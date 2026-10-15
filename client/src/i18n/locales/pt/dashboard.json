@@ -141,7 +141,8 @@
       "energySplit": "Energia de",
       "incomplete": "Apenas {{known}} de {{total}} componentes indicam este valor, por isso a quantidade real é pelo menos esta.",
       "noEnergySplit": "Dados de macros insuficientes para repartir a energia.",
-      "title": "Resumo"
+      "title": "Resumo",
+      "incompleteNote": "Nem todos os componentes indicam este valor, por isso a quantidade real é pelo menos esta."
     },
     "toastDeleteFailed": "Não foi possível remover o componente",
     "toastUpdateFailed": "Não foi possível alterar a quantidade",

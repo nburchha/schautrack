@@ -140,6 +140,7 @@
     "summary": {
       "energySplit": "Energy from",
       "incomplete": "Only {{known}} of {{total}} components list this value, so the real amount is at least this much.",
+      "incompleteNote": "Not every component lists this value, so the real amount is at least this much.",
       "noEnergySplit": "Not enough macro data to split the energy.",
       "title": "Summary"
     },

@@ -147,7 +147,8 @@
       "energySplit": "Energia z",
       "incomplete": "Tylko {{known}} z {{total}} składników podaje tę wartość, więc rzeczywista ilość jest co najmniej taka.",
       "noEnergySplit": "Za mało danych o makroskładnikach, by podzielić energię.",
-      "title": "Podsumowanie"
+      "title": "Podsumowanie",
+      "incompleteNote": "Nie każdy składnik podaje tę wartość, więc rzeczywista ilość jest co najmniej taka."
     },
     "toastDeleteFailed": "Nie udało się usunąć składnika",
     "toastUpdateFailed": "Nie udało się zmienić ilości",

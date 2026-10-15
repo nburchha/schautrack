@@ -141,7 +141,8 @@
       "energySplit": "Energie aus",
       "incomplete": "Nur {{known}} von {{total}} Komponenten kennen diesen Wert, die tatsächliche Menge ist mindestens so hoch.",
       "noEnergySplit": "Zu wenig Makrodaten, um die Energie aufzuteilen.",
-      "title": "Zusammenfassung"
+      "title": "Zusammenfassung",
+      "incompleteNote": "Nicht jede Komponente nennt diesen Wert, die tatsächliche Menge ist mindestens so hoch."
     },
     "toastDeleteFailed": "Komponente konnte nicht entfernt werden",
     "toastUpdateFailed": "Menge konnte nicht geändert werden",

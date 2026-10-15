@@ -141,7 +141,8 @@
       "energySplit": "Energie uit",
       "incomplete": "Slechts {{known}} van {{total}} componenten kennen deze waarde, dus de werkelijke hoeveelheid is minstens zo hoog.",
       "noEnergySplit": "Te weinig macrogegevens om de energie te verdelen.",
-      "title": "Samenvatting"
+      "title": "Samenvatting",
+      "incompleteNote": "Niet elke component kent deze waarde, dus de werkelijke hoeveelheid is minstens zo hoog."
     },
     "toastDeleteFailed": "Component verwijderen mislukt",
     "toastUpdateFailed": "Hoeveelheid wijzigen mislukt",
