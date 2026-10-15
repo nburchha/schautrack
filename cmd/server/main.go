@@ -247,6 +247,10 @@ func main() {
 	r.With(middleware.RequireLogin, session.CsrfProtection).Post("/entries", entriesHandler.CreateEntry)
 	r.With(middleware.RequireLogin, session.CsrfProtection).Post("/entries/{id}/update", entriesHandler.UpdateEntry)
 	r.With(middleware.RequireLogin, session.CsrfProtection).Post("/entries/{id}/delete", entriesHandler.DeleteEntry)
+	// Meal detail page: one entry with its components, plus the two edits the page offers.
+	r.With(middleware.RequireLogin, middleware.RequireLinkAuth(pool, service.ShareNutrition)).Get("/api/entries/{id}", entriesHandler.EntryDetail)
+	r.With(middleware.RequireLogin, session.CsrfProtection).Post("/api/entries/{id}/components/{cid}/update", entriesHandler.UpdateComponent)
+	r.With(middleware.RequireLogin, session.CsrfProtection).Post("/api/entries/{id}/components/{cid}/delete", entriesHandler.DeleteComponent)
 	// Export and import both move whole-account data — gate them with step-up.
 	r.With(middleware.RequireLogin, stepUp, session.CsrfProtection).Post("/settings/export", entriesHandler.Export)
 	r.With(middleware.RequireLogin, stepUp, session.CsrfProtection).Post("/settings/import", entriesHandler.Import)

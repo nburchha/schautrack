@@ -11,6 +11,7 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
+	"github.com/jackc/pgx/v5/pgxpool"
 
 	"schautrack/internal/apierr"
 	"schautrack/internal/model"
@@ -301,25 +302,35 @@ func (h *V1Handler) createEntryWithComponents(w http.ResponseWriter, r *http.Req
 	h.finishEntryMutation(w, r, tx, entryID, user.ID, http.StatusCreated, true)
 }
 
-// lockEntry opens a transaction holding a row lock on the caller's entry, so
-// concurrent component writes recompute one after the other.
+// lockUserEntry opens a transaction holding a row lock on the user's entry, so
+// concurrent component writes recompute one after the other. The caller owns
+// the returned transaction. pgx.ErrNoRows means the entry does not exist or is
+// not the user's.
+func lockUserEntry(ctx context.Context, pool *pgxpool.Pool, entryID, userID int) (pgx.Tx, error) {
+	tx, err := pool.Begin(ctx)
+	if err != nil {
+		return nil, err
+	}
+	var locked int
+	if err := tx.QueryRow(ctx,
+		"SELECT id FROM calorie_entries WHERE id = $1 AND user_id = $2 FOR UPDATE",
+		entryID, userID).Scan(&locked); err != nil {
+		tx.Rollback(ctx)
+		return nil, err
+	}
+	return tx, nil
+}
+
+// lockEntry is lockUserEntry for a /api/v1 request: it reads the id from the
+// path and answers the problem itself when it cannot lock.
 func (h *V1Handler) lockEntry(w http.ResponseWriter, r *http.Request) (tx pgx.Tx, entryID int, ok bool) {
 	entryID, prob := pathID(r)
 	if prob != nil {
 		apierr.Write(w, r, prob)
 		return nil, 0, false
 	}
-	tx, err := h.Pool.Begin(r.Context())
+	tx, err := lockUserEntry(r.Context(), h.Pool, entryID, v1User(r).ID)
 	if err != nil {
-		apierr.Write(w, r, dbFail("begin component write", err))
-		return nil, 0, false
-	}
-	var locked int
-	err = tx.QueryRow(r.Context(),
-		"SELECT id FROM calorie_entries WHERE id = $1 AND user_id = $2 FOR UPDATE",
-		entryID, v1User(r).ID).Scan(&locked)
-	if err != nil {
-		tx.Rollback(r.Context())
 		if errors.Is(err, pgx.ErrNoRows) {
 			apierr.Write(w, r, apierr.NotFound("No entry with that id."))
 		} else {
