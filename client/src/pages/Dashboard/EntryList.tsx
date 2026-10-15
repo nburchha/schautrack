@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { Link, useNavigate } from 'react-router';
 import { useTranslation } from 'react-i18next';
 import type { Entry } from '@/types';
 import { updateEntry, deleteEntry, createEntry } from '@/api/entries';
@@ -15,9 +16,11 @@ interface Props {
   enabledMacros: string[];
   caloriesEnabled: boolean;
   autoCalcCalories: boolean;
+  /** Set when the list shows a linked account's day, so the meal page reads that account's entry. */
+  viewUserId?: number;
 }
 
-export default function EntryList({ entries, canEdit, enabledMacros, caloriesEnabled, autoCalcCalories }: Props) {
+export default function EntryList({ entries, canEdit, enabledMacros, caloriesEnabled, autoCalcCalories, viewUserId }: Props) {
   const { t } = useTranslation('dashboard');
   const queryClient = useQueryClient();
 
@@ -35,6 +38,7 @@ export default function EntryList({ entries, canEdit, enabledMacros, caloriesEna
           enabledMacros={enabledMacros}
           caloriesEnabled={caloriesEnabled}
           autoCalcCalories={autoCalcCalories}
+          viewUserId={viewUserId}
           onUpdate={() => {
             // See Dashboard.tsx: the SSE echo only reaches this tab when the
             // write hit the instance holding its stream, so refresh locally too.
@@ -50,12 +54,13 @@ export default function EntryList({ entries, canEdit, enabledMacros, caloriesEna
   );
 }
 
-function EntryRow({ entry, canEdit, enabledMacros, caloriesEnabled, autoCalcCalories, onUpdate, onSaveAsFood }: {
+function EntryRow({ entry, canEdit, enabledMacros, caloriesEnabled, autoCalcCalories, viewUserId, onUpdate, onSaveAsFood }: {
   entry: Entry;
   canEdit: boolean;
   enabledMacros: string[];
   caloriesEnabled: boolean;
   autoCalcCalories: boolean;
+  viewUserId?: number;
   onUpdate: () => void;
   onSaveAsFood: () => void;
 }) {
@@ -64,6 +69,17 @@ function EntryRow({ entry, canEdit, enabledMacros, caloriesEnabled, autoCalcCalo
   const [editValue, setEditValue] = useState('');
   const [savingFood, setSavingFood] = useState(false);
   const addToast = useToastStore((s) => s.addToast);
+  const navigate = useNavigate();
+  const mealPath = `/entries/${entry.id}${viewUserId ? `?user=${viewUserId}` : ''}`;
+  const componentCount = entry.componentCount ?? 0;
+
+  // The whole card opens the meal page. Anything interactive inside it (name
+  // edit, macro pills, bookmark, delete) keeps its own click, so only a tap on
+  // the card's empty space navigates. The chevron is the keyboard/AT target.
+  const handleCardClick = (e: React.MouseEvent) => {
+    if ((e.target as HTMLElement).closest('button, input, a')) return;
+    navigate(mealPath);
+  };
 
   const handleSaveAsFood = async () => {
     if (savingFood) return;
@@ -148,10 +164,14 @@ function EntryRow({ entry, canEdit, enabledMacros, caloriesEnabled, autoCalcCalo
   const hasMacros = caloriesEnabled || enabledMacros.length > 0;
 
   return (
-    <div className={cn(
-      'py-0.5 transition-colors duration-150 hover:bg-white/[0.02]',
-      editing && 'rounded-[10px] bg-[#0ea5e9]/5',
-    )}>
+    <div
+      className={cn(
+        'cursor-pointer py-0.5 transition-colors duration-150 hover:bg-white/[0.02]',
+        editing && 'rounded-[10px] bg-[#0ea5e9]/5',
+      )}
+      onClick={handleCardClick}
+      data-testid="entry-row"
+    >
       {/* Row 1: Name + Time + Delete */}
       <div className="flex items-center gap-1.5 px-1 py-2">
         <span className="flex-1 min-w-0 truncate">
@@ -194,11 +214,22 @@ function EntryRow({ entry, canEdit, enabledMacros, caloriesEnabled, autoCalcCalo
             </svg>
           </button>
         )}
+        <Link
+          to={mealPath}
+          className="size-7 flex items-center justify-center rounded-[10px] text-muted-foreground hover:text-foreground hover:bg-white/[0.06] transition-colors shrink-0"
+          aria-label={t('entries.openMeal', { name: entry.name || t('entries.unnamedEntryFallback') })}
+          title={t('entries.openMealTitle')}
+          data-testid="entry-open"
+        >
+          <svg aria-hidden="true" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.25" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M9 18l6-6-6-6" />
+          </svg>
+        </Link>
       </div>
 
       {/* Row 2: Macro pills */}
-      {hasMacros && (
-        <div className="flex flex-wrap gap-1.5 px-1 pb-2">
+      {(hasMacros || componentCount > 0) && (
+        <div className="flex flex-wrap items-center gap-1.5 px-1 pb-2">
           {caloriesEnabled && (
             editing === 'amount' ? (
               <MacroPillEditing
@@ -248,6 +279,11 @@ function EntryRow({ entry, canEdit, enabledMacros, caloriesEnabled, autoCalcCalo
               />
             );
           })}
+          {componentCount > 0 && (
+            <span className="rounded-full border border-white/10 px-2 py-px text-[11px] text-muted-foreground" data-testid="entry-component-count">
+              {t('entries.componentCount', { count: componentCount })}
+            </span>
+          )}
         </div>
       )}
     </div>

@@ -103,7 +103,50 @@
     "toastUpdateFailed": "Aggiornamento della voce non riuscito",
     "toastDeleted": "Voce eliminata",
     "toastRestoreFailed": "Ripristino non riuscito",
-    "toastDeleteFailed": "Eliminazione della voce non riuscita"
+    "toastDeleteFailed": "Eliminazione della voce non riuscita",
+    "componentCount_one": "{{count}} componente",
+    "componentCount_other": "{{count}} componenti",
+    "openMeal": "Apri i dettagli di {{name}}",
+    "openMealTitle": "Mostra componenti e macro"
+  },
+  "meal": {
+    "addPage": {
+      "back": "Torna al pasto",
+      "soon": "La ricerca degli alimenti arriverà presto. Qui comporrai questo pasto dal catalogo.",
+      "title": "Aggiungi componente"
+    },
+    "back": "Torna al giorno",
+    "components": {
+      "add": "Componente",
+      "adHoc": "Ad hoc",
+      "confirmRemove": "Rimuovere {{name}} da questo pasto?",
+      "confirmRemoveAction": "Rimuovi",
+      "editGrams": "Modifica i grammi di {{name}}",
+      "gramsLabel": "Grammi di {{name}}",
+      "keep": "Mantieni",
+      "per100g": "{{kcal}} kcal per 100 g",
+      "remove": "Rimuovi {{name}}",
+      "removeTitle": "Rimuovi componente",
+      "share": "{{percent}}% delle calorie del pasto",
+      "title": "Componenti"
+    },
+    "direct": {
+      "body": "Questa voce non ha componenti. I suoi valori sono stati inseriti direttamente.",
+      "title": "Inserito come totale"
+    },
+    "lastComponentHint": "Rimuovendo l'ultimo componente i totali restano come pasto inserito direttamente.",
+    "notFound": "Questa voce non esiste (più).",
+    "sharedBy": "Voce di {{label}}",
+    "summary": {
+      "energySplit": "Energia da",
+      "incomplete": "Solo {{known}} componenti su {{total}} riportano questo valore, quindi la quantità reale è almeno questa.",
+      "noEnergySplit": "Dati sui macro insufficienti per ripartire l'energia.",
+      "title": "Riepilogo",
+      "incompleteNote": "Non tutti i componenti riportano questo valore, quindi la quantità reale è almeno questa."
+    },
+    "toastDeleteFailed": "Impossibile rimuovere il componente",
+    "toastUpdateFailed": "Impossibile modificare la quantità",
+    "untitled": "Pasto"
   },
   "notes": {
     "sectionTitle": "Note",

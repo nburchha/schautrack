@@ -239,7 +239,9 @@ func buildDailyStats(dayOptions []string, totalsByDate map[string]int, dailyGoal
 
 func getEntriesForDate(r *http.Request, pool *pgxpool.Pool, userID int, dateStr string, enabledMacros []string, tz string) []map[string]any {
 	rows, err := pool.Query(r.Context(),
-		"SELECT id, entry_date, amount, entry_name, created_at, protein_g, carbs_g, fat_g, fiber_g, sugar_g FROM calorie_entries WHERE user_id = $1 AND entry_date = $2 ORDER BY created_at DESC",
+		`SELECT id, entry_date, amount, entry_name, COALESCE(eaten_at, created_at), protein_g, carbs_g, fat_g, fiber_g, sugar_g,
+			(SELECT COUNT(*)::int FROM entry_components c WHERE c.entry_id = calorie_entries.id)
+		FROM calorie_entries WHERE user_id = $1 AND entry_date = $2 ORDER BY created_at DESC`,
 		userID, dateStr)
 	if err != nil {
 		slog.Error("failed to fetch entries", "error", err)
@@ -253,16 +255,19 @@ func getEntriesForDate(r *http.Request, pool *pgxpool.Pool, userID int, dateStr 
 		var entryDate string
 		var amount int
 		var entryName *string
-		var createdAt time.Time
+		var eatenAt time.Time
 		var proteinG, carbsG, fatG, fiberG, sugarG *int
-		if err := rows.Scan(&id, &entryDate, &amount, &entryName, &createdAt, &proteinG, &carbsG, &fatG, &fiberG, &sugarG); err != nil {
+		var componentCount int
+		if err := rows.Scan(&id, &entryDate, &amount, &entryName, &eatenAt, &proteinG, &carbsG, &fatG, &fiberG, &sugarG, &componentCount); err != nil {
 			continue
 		}
 		macros := buildMacroMap(enabledMacros, proteinG, carbsG, fatG, fiberG, sugarG)
 		entry := map[string]any{
 			"id": id, "date": entryDate, "amount": amount,
-			"time": service.FormatTimeInTz(createdAt, tz),
+			"time": service.FormatTimeInTz(eatenAt, tz),
 			"name": entryName, "macros": macros,
+			// Lets the list offer "3 components" without a query per row.
+			"componentCount": componentCount,
 		}
 		result = append(result, entry)
 	}

@@ -103,7 +103,50 @@
     "toastUpdateFailed": "Falha ao atualizar registo",
     "toastDeleted": "Registo eliminado",
     "toastRestoreFailed": "Falha ao restaurar",
-    "toastDeleteFailed": "Falha ao eliminar registo"
+    "toastDeleteFailed": "Falha ao eliminar registo",
+    "componentCount_one": "{{count}} componente",
+    "componentCount_other": "{{count}} componentes",
+    "openMeal": "Abrir detalhes de {{name}}",
+    "openMealTitle": "Mostrar componentes e macros"
+  },
+  "meal": {
+    "addPage": {
+      "back": "Voltar à refeição",
+      "soon": "A pesquisa de alimentos chega em breve. Aqui vais montar esta refeição a partir do catálogo.",
+      "title": "Adicionar componente"
+    },
+    "back": "Voltar ao dia",
+    "components": {
+      "add": "Componente",
+      "adHoc": "Ad hoc",
+      "confirmRemove": "Remover {{name}} desta refeição?",
+      "confirmRemoveAction": "Remover",
+      "editGrams": "Alterar as gramas de {{name}}",
+      "gramsLabel": "Gramas de {{name}}",
+      "keep": "Manter",
+      "per100g": "{{kcal}} kcal por 100 g",
+      "remove": "Remover {{name}}",
+      "removeTitle": "Remover componente",
+      "share": "{{percent}}% das calorias da refeição",
+      "title": "Componentes"
+    },
+    "direct": {
+      "body": "Este registo não tem componentes. Os valores foram introduzidos diretamente.",
+      "title": "Introduzido como total"
+    },
+    "lastComponentHint": "Ao remover o último componente, os totais ficam como uma refeição introduzida diretamente.",
+    "notFound": "Este registo já não existe.",
+    "sharedBy": "Registo de {{label}}",
+    "summary": {
+      "energySplit": "Energia de",
+      "incomplete": "Apenas {{known}} de {{total}} componentes indicam este valor, por isso a quantidade real é pelo menos esta.",
+      "noEnergySplit": "Dados de macros insuficientes para repartir a energia.",
+      "title": "Resumo",
+      "incompleteNote": "Nem todos os componentes indicam este valor, por isso a quantidade real é pelo menos esta."
+    },
+    "toastDeleteFailed": "Não foi possível remover o componente",
+    "toastUpdateFailed": "Não foi possível alterar a quantidade",
+    "untitled": "Refeição"
   },
   "notes": {
     "sectionTitle": "Notas",

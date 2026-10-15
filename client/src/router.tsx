@@ -12,6 +12,7 @@ import VerifyEmail from '@/pages/VerifyEmail/VerifyEmail';
 // The authenticated and legal pages are code-split into their own chunks so
 // the initial (unauthenticated) load no longer ships the entire app.
 const Dashboard = lazyRoute(() => import('@/pages/Dashboard/Dashboard'));
+const MealRoutes = lazyRoute(() => import('@/pages/Meal/MealRoutes'));
 const Plan = lazyRoute(() => import('@/pages/Plan/Plan'));
 const Settings = lazyRoute(() => import('@/pages/Settings/Settings'));
 const Account = lazyRoute(() => import('@/pages/Account/Account'));
@@ -47,6 +48,7 @@ export default function AppRouter() {
         <Route path="/reset-password" element={<GuestRoute><ResetPassword /></GuestRoute>} />
         <Route path="/verify-email" element={<VerifyEmail />} />
         <Route path="/dashboard" element={<ProtectedRoute><Dashboard /></ProtectedRoute>} />
+        <Route path="/entries/:id/*" element={<ProtectedRoute><MealRoutes /></ProtectedRoute>} />
         <Route path="/plan" element={<ProtectedRoute><Plan /></ProtectedRoute>} />
         <Route path="/settings" element={<ProtectedRoute><Settings /></ProtectedRoute>} />
         <Route path="/account" element={<ProtectedRoute><Account /></ProtectedRoute>} />
