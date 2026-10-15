@@ -103,7 +103,49 @@
     "toastUpdateFailed": "Error al actualizar la entrada",
     "toastDeleted": "Entrada eliminada",
     "toastRestoreFailed": "Error al restaurar",
-    "toastDeleteFailed": "Error al eliminar la entrada"
+    "toastDeleteFailed": "Error al eliminar la entrada",
+    "componentCount_one": "{{count}} componente",
+    "componentCount_other": "{{count}} componentes",
+    "openMeal": "Abrir detalles de {{name}}",
+    "openMealTitle": "Ver componentes y macros"
+  },
+  "meal": {
+    "addPage": {
+      "back": "Volver a la comida",
+      "soon": "La búsqueda de alimentos llegará pronto. Aquí armarás esta comida desde el catálogo.",
+      "title": "Añadir componente"
+    },
+    "back": "Volver al día",
+    "components": {
+      "add": "Componente",
+      "adHoc": "Ad hoc",
+      "confirmRemove": "¿Quitar {{name}} de esta comida?",
+      "confirmRemoveAction": "Quitar",
+      "editGrams": "Cambiar los gramos de {{name}}",
+      "gramsLabel": "Gramos de {{name}}",
+      "keep": "Mantener",
+      "per100g": "{{kcal}} kcal por 100 g",
+      "remove": "Quitar {{name}}",
+      "removeTitle": "Quitar componente",
+      "share": "{{percent}} % de las calorías de la comida",
+      "title": "Componentes"
+    },
+    "direct": {
+      "body": "Esta entrada no tiene componentes. Sus valores se introdujeron directamente.",
+      "title": "Introducido como total"
+    },
+    "lastComponentHint": "Si quitas el último componente, los totales se conservan como una comida introducida directamente.",
+    "notFound": "Esta entrada ya no existe.",
+    "sharedBy": "Entrada de {{label}}",
+    "summary": {
+      "energySplit": "Energía de",
+      "incomplete": "Solo {{known}} de {{total}} componentes indican este valor, así que la cantidad real es al menos esta.",
+      "noEnergySplit": "No hay suficientes datos de macros para repartir la energía.",
+      "title": "Resumen"
+    },
+    "toastDeleteFailed": "No se pudo quitar el componente",
+    "toastUpdateFailed": "No se pudo cambiar la cantidad",
+    "untitled": "Comida"
   },
   "notes": {
     "sectionTitle": "Notas",

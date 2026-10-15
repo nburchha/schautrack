@@ -103,7 +103,49 @@
     "toastUpdateFailed": "Échec de la mise à jour de l'entrée",
     "toastDeleted": "Entrée supprimée",
     "toastRestoreFailed": "Échec de la restauration",
-    "toastDeleteFailed": "Échec de la suppression de l'entrée"
+    "toastDeleteFailed": "Échec de la suppression de l'entrée",
+    "componentCount_one": "{{count}} composant",
+    "componentCount_other": "{{count}} composants",
+    "openMeal": "Ouvrir les détails de {{name}}",
+    "openMealTitle": "Afficher les composants et les macros"
+  },
+  "meal": {
+    "addPage": {
+      "back": "Retour au repas",
+      "soon": "La recherche d'aliments arrive bientôt. Vous composerez ce repas depuis le catalogue ici même.",
+      "title": "Ajouter un composant"
+    },
+    "back": "Retour à la journée",
+    "components": {
+      "add": "Composant",
+      "adHoc": "Ad hoc",
+      "confirmRemove": "Retirer {{name}} de ce repas ?",
+      "confirmRemoveAction": "Retirer",
+      "editGrams": "Modifier les grammes de {{name}}",
+      "gramsLabel": "Grammes de {{name}}",
+      "keep": "Garder",
+      "per100g": "{{kcal}} kcal pour 100 g",
+      "remove": "Retirer {{name}}",
+      "removeTitle": "Retirer le composant",
+      "share": "{{percent}} % des calories du repas",
+      "title": "Composants"
+    },
+    "direct": {
+      "body": "Cette entrée n'a pas de composants. Ses valeurs ont été saisies directement.",
+      "title": "Saisi comme total"
+    },
+    "lastComponentHint": "Si vous retirez le dernier composant, les totaux sont conservés comme un repas saisi directement.",
+    "notFound": "Cette entrée n'existe plus.",
+    "sharedBy": "Entrée de {{label}}",
+    "summary": {
+      "energySplit": "Énergie issue de",
+      "incomplete": "Seuls {{known}} composants sur {{total}} indiquent cette valeur ; la quantité réelle est au moins celle-ci.",
+      "noEnergySplit": "Pas assez de données de macros pour répartir l'énergie.",
+      "title": "Résumé"
+    },
+    "toastDeleteFailed": "Impossible de retirer le composant",
+    "toastUpdateFailed": "Impossible de modifier la quantité",
+    "untitled": "Repas"
   },
   "notes": {
     "sectionTitle": "Notes",

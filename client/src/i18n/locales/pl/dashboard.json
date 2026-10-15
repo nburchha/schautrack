@@ -107,7 +107,51 @@
     "toastUpdateFailed": "Nie udało się zaktualizować wpisu",
     "toastDeleted": "Wpis usunięty",
     "toastRestoreFailed": "Przywracanie nie powiodło się",
-    "toastDeleteFailed": "Nie udało się usunąć wpisu"
+    "toastDeleteFailed": "Nie udało się usunąć wpisu",
+    "componentCount_one": "{{count}} składnik",
+    "componentCount_few": "{{count}} składniki",
+    "componentCount_many": "{{count}} składników",
+    "componentCount_other": "{{count}} składnika",
+    "openMeal": "Otwórz szczegóły: {{name}}",
+    "openMealTitle": "Pokaż składniki i makroskładniki"
+  },
+  "meal": {
+    "addPage": {
+      "back": "Wróć do posiłku",
+      "soon": "Wyszukiwarka produktów wkrótce. Tutaj zbudujesz ten posiłek z katalogu.",
+      "title": "Dodaj składnik"
+    },
+    "back": "Wróć do dnia",
+    "components": {
+      "add": "Składnik",
+      "adHoc": "Ad hoc",
+      "confirmRemove": "Usunąć {{name}} z tego posiłku?",
+      "confirmRemoveAction": "Usuń",
+      "editGrams": "Zmień gramy: {{name}}",
+      "gramsLabel": "Gramy: {{name}}",
+      "keep": "Zostaw",
+      "per100g": "{{kcal}} kcal na 100 g",
+      "remove": "Usuń: {{name}}",
+      "removeTitle": "Usuń składnik",
+      "share": "{{percent}}% kalorii posiłku",
+      "title": "Składniki"
+    },
+    "direct": {
+      "body": "Ten wpis nie ma składników. Jego wartości wpisano bezpośrednio.",
+      "title": "Wpisano jako sumę"
+    },
+    "lastComponentHint": "Po usunięciu ostatniego składnika sumy zostają jako posiłek wpisany bezpośrednio.",
+    "notFound": "Ten wpis już nie istnieje.",
+    "sharedBy": "Wpis: {{label}}",
+    "summary": {
+      "energySplit": "Energia z",
+      "incomplete": "Tylko {{known}} z {{total}} składników podaje tę wartość, więc rzeczywista ilość jest co najmniej taka.",
+      "noEnergySplit": "Za mało danych o makroskładnikach, by podzielić energię.",
+      "title": "Podsumowanie"
+    },
+    "toastDeleteFailed": "Nie udało się usunąć składnika",
+    "toastUpdateFailed": "Nie udało się zmienić ilości",
+    "untitled": "Posiłek"
   },
   "notes": {
     "sectionTitle": "Notatki",

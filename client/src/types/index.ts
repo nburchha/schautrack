@@ -36,6 +36,44 @@ export interface Entry {
   amount: number;
   name: string | null;
   macros: Record<string, number | null> | null;
+  /** Number of components; 0 for a direct entry (values typed in as a total). */
+  componentCount?: number;
+}
+
+/** Nutrients per 100 g. null means the source does not know the value. */
+export interface ComponentMacros {
+  protein_g: number | null;
+  carbs_g: number | null;
+  fat_g: number | null;
+  fiber_g: number | null;
+  sugar_g: number | null;
+}
+
+/**
+ * One ingredient of an entry: a snapshot of a food, in grams. food_id is null
+ * for an ad-hoc component and after its catalog food was deleted.
+ */
+export interface EntryComponent {
+  id: number;
+  food_id: number | null;
+  name: string;
+  grams: number;
+  calories_per_100g: number;
+  macros_per_100g: ComponentMacros;
+}
+
+/** The meal detail payload (GET /api/entries/:id). Shares the v1 entry shape. */
+export interface EntryDetail {
+  id: number;
+  date: string;
+  /** Total kcal; the sum of the components when there are any. */
+  calories: number;
+  name: string | null;
+  /** Totals in grams, null when no component knows the value. */
+  macros: ComponentMacros;
+  eaten_at: string;
+  local_time: string;
+  components: EntryComponent[];
 }
 
 export interface WeightEntry {

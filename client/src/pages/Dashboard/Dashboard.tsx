@@ -244,6 +244,7 @@ export default function Dashboard() {
           <EntryList
             entries={dayData?.entries || []}
             canEdit={canEdit}
+            viewUserId={canEdit ? undefined : effectiveUserId}
             enabledMacros={dashboard.enabledMacros}
             caloriesEnabled={dashboard.caloriesEnabled}
             autoCalcCalories={dashboard.autoCalcCalories}

@@ -103,7 +103,49 @@
     "toastUpdateFailed": "Eintrag konnte nicht aktualisiert werden",
     "toastDeleted": "Eintrag gelöscht",
     "toastRestoreFailed": "Wiederherstellung fehlgeschlagen",
-    "toastDeleteFailed": "Eintrag konnte nicht gelöscht werden"
+    "toastDeleteFailed": "Eintrag konnte nicht gelöscht werden",
+    "componentCount_one": "{{count}} Komponente",
+    "componentCount_other": "{{count}} Komponenten",
+    "openMeal": "Details zu {{name}} öffnen",
+    "openMealTitle": "Komponenten und Makros anzeigen"
+  },
+  "meal": {
+    "addPage": {
+      "back": "Zurück zur Mahlzeit",
+      "soon": "Die Lebensmittelsuche kommt bald. Hier baust du die Mahlzeit dann aus dem Katalog auf.",
+      "title": "Komponente hinzufügen"
+    },
+    "back": "Zurück zum Tag",
+    "components": {
+      "add": "Komponente",
+      "adHoc": "Ad hoc",
+      "confirmRemove": "{{name}} aus dieser Mahlzeit entfernen?",
+      "confirmRemoveAction": "Entfernen",
+      "editGrams": "Gramm von {{name}} ändern",
+      "gramsLabel": "Gramm von {{name}}",
+      "keep": "Behalten",
+      "per100g": "{{kcal}} kcal pro 100 g",
+      "remove": "{{name}} entfernen",
+      "removeTitle": "Komponente entfernen",
+      "share": "{{percent}} % der Kalorien der Mahlzeit",
+      "title": "Komponenten"
+    },
+    "direct": {
+      "body": "Dieser Eintrag hat keine Komponenten. Seine Werte wurden direkt eingetragen.",
+      "title": "Als Summe eingetragen"
+    },
+    "lastComponentHint": "Wird die letzte Komponente entfernt, bleiben die Summen als direkt eingetragene Mahlzeit erhalten.",
+    "notFound": "Dieser Eintrag existiert nicht (mehr).",
+    "sharedBy": "Eintrag von {{label}}",
+    "summary": {
+      "energySplit": "Energie aus",
+      "incomplete": "Nur {{known}} von {{total}} Komponenten kennen diesen Wert, die tatsächliche Menge ist mindestens so hoch.",
+      "noEnergySplit": "Zu wenig Makrodaten, um die Energie aufzuteilen.",
+      "title": "Zusammenfassung"
+    },
+    "toastDeleteFailed": "Komponente konnte nicht entfernt werden",
+    "toastUpdateFailed": "Menge konnte nicht geändert werden",
+    "untitled": "Mahlzeit"
   },
   "notes": {
     "sectionTitle": "Notizen",
