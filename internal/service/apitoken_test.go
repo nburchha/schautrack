@@ -347,3 +347,82 @@ func TestEveryScopeHasADescription(t *testing.T) {
 		}
 	}
 }
+
+// EnsureAPIToken is what keeps a provisioned token stable across restarts.
+// Skipped unless TEST_DATABASE_URL is set, like the other integration test here.
+func TestEnsureAPIToken(t *testing.T) {
+	url := os.Getenv("TEST_DATABASE_URL")
+	if url == "" {
+		t.Skip("TEST_DATABASE_URL not set; skipping integration test")
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+	defer cancel()
+
+	pool, err := database.NewPool(ctx, url)
+	if err != nil {
+		t.Fatalf("NewPool failed: %v", err)
+	}
+	defer pool.Close()
+	if err := database.InitSchemaWithRetry(ctx, pool, 3); err != nil {
+		t.Fatalf("schema init failed: %v", err)
+	}
+
+	newUser := func() int {
+		var id int
+		email := fmt.Sprintf("ensure-token-test-%d@example.com", time.Now().UnixNano())
+		if err := pool.QueryRow(ctx,
+			"INSERT INTO users (email, password_hash) VALUES ($1, 'x') RETURNING id", email,
+		).Scan(&id); err != nil {
+			t.Fatalf("failed to create test user: %v", err)
+		}
+		t.Cleanup(func() { pool.Exec(context.Background(), "DELETE FROM users WHERE id = $1", id) })
+		return id
+	}
+	user, other := newUser(), newUser()
+	weight := []string{ScopeWeightWrite}
+
+	first, created, err := EnsureAPIToken(ctx, pool, user, "scale", weight, "")
+	if err != nil || !created || !LooksLikeAPIToken(first) {
+		t.Fatalf("first call = %q, created=%v, err=%v; want a new token", first, created, err)
+	}
+
+	again, created, err := EnsureAPIToken(ctx, pool, user, "scale", weight, first)
+	if err != nil || created || again != first {
+		t.Fatalf("second call created=%v err=%v same=%v; want the same token untouched", created, err, again == first)
+	}
+
+	// A different scope set replaces the token and revokes the old one.
+	wider, created, err := EnsureAPIToken(ctx, pool, user, "scale", []string{ScopeWeightRead, ScopeEntriesRead}, first)
+	if err != nil || !created || wider == first {
+		t.Fatalf("scope change created=%v err=%v; want a replacement", created, err)
+	}
+	if _, err := AuthenticateAPIToken(ctx, pool, first); !errors.Is(err, ErrTokenInvalid) {
+		t.Errorf("old token still authenticates after replacement: %v", err)
+	}
+	if n, _ := CountActiveAPITokens(ctx, pool, user); n != 1 {
+		t.Errorf("%d active tokens after replacement, want 1", n)
+	}
+
+	// A token that is not on file (lost volume) is replaced, never duplicated.
+	if _, created, err := EnsureAPIToken(ctx, pool, user, "scale", weight, ""); err != nil || !created {
+		t.Fatalf("lost token: created=%v err=%v", created, err)
+	}
+	if n, _ := CountActiveAPITokens(ctx, pool, user); n != 1 {
+		t.Errorf("%d active tokens after re-minting, want 1", n)
+	}
+
+	// Another user's token with the same name and scopes is not accepted for this user.
+	theirs, _, err := EnsureAPIToken(ctx, pool, other, "scale", weight, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	got, created, err := EnsureAPIToken(ctx, pool, user, "scale", weight, theirs)
+	if err != nil || !created || got == theirs {
+		t.Fatalf("foreign token reused: created=%v err=%v", created, err)
+	}
+
+	if _, _, err := EnsureAPIToken(ctx, pool, user, "scale", []string{"bogus"}, ""); err == nil {
+		t.Error("unknown scope was accepted")
+	}
+}

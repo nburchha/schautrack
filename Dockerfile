@@ -26,7 +26,8 @@ COPY internal/ internal/
 
 ARG BUILD_VERSION=dev
 RUN CGO_ENABLED=0 go build -ldflags="-s -w -X main.version=${BUILD_VERSION}" -o /server ./cmd/server && \
-    CGO_ENABLED=0 go build -ldflags="-s -w" -o /import-foods ./cmd/import-foods
+    CGO_ENABLED=0 go build -ldflags="-s -w" -o /import-foods ./cmd/import-foods && \
+    CGO_ENABLED=0 go build -ldflags="-s -w" -o /mint-token ./cmd/mint-token
 
 FROM alpine:3.24
 
@@ -50,6 +51,7 @@ WORKDIR /app
 
 COPY --from=server /server ./server
 COPY --from=server /import-foods ./import-foods
+COPY --from=server /mint-token ./mint-token
 COPY --from=client /app/client/dist ./client/dist
 COPY public ./public
 
