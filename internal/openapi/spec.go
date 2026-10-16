@@ -1300,6 +1300,19 @@ func paths() map[string]*PathItem {
 			}, errs(nil)),
 		}},
 
+		"/foods/{id}": {Delete: &Operation{
+			OperationID: "deleteFood", Summary: "Delete a food of your own",
+			Description: "Removes a food created with `POST /foods`. Shared catalog foods and " +
+				"other accounts' foods answer 404. Entries that used the food keep their " +
+				"components with the values captured at the time; only the link to the food is dropped.",
+			Tags: []string{"Foods"}, Scope: service.ScopeFoodsWrite,
+			Security:   []SecurityRequirement{{"bearerAuth": {service.ScopeFoodsWrite}}},
+			Parameters: []Parameter{idParam},
+			Responses: merge(map[string]*Response{
+				"204": noContent204, "400": respRef("BadRequest"), "404": respRef("NotFound"),
+			}, errs(nil)),
+		}},
+
 		"/saved-foods": {
 			Get: &Operation{
 				OperationID: "listSavedFoods", Summary: "List saved foods",

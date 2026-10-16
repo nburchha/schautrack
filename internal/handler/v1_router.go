@@ -200,6 +200,7 @@ func (h *V1Handler) MountAPIV1(pool *pgxpool.Pool) chi.Router {
 		r.Route("/foods", func(r chi.Router) {
 			r.With(middleware.RequireScope(service.ScopeFoodsRead)).Get("/search", h.SearchFoodsV1)
 			r.With(middleware.RequireScope(service.ScopeFoodsWrite)).Post("/", h.withIdempotency(h.CreateFoodV1))
+			r.With(middleware.RequireScope(service.ScopeFoodsWrite)).Delete("/{id}", h.DeleteFoodV1)
 		})
 
 		r.Route("/notes", func(r chi.Router) {

@@ -164,6 +164,61 @@ func TestV1CreateOwnFoodIsPrivateAndSearchable(t *testing.T) {
 	requireProblem(t, dup, http.StatusConflict)
 }
 
+func TestV1DeleteOwnFood(t *testing.T) {
+	e := newV1Env(t)
+	token := e.token(service.ScopeFoodsWrite, service.ScopeFoodsRead, service.ScopeEntriesWrite, service.ScopeEntriesRead)
+	tag := fmt.Sprintf("dl%d", time.Now().UnixNano()%1_000_000_000)
+
+	foodID := e.seedOwnFood(tag+" Mozzarella", 250, nil)
+	entry := e.createEntry(token, fmt.Sprintf(
+		`{"name":"Pizza","components":[{"food_id":%d,"grams":100}]}`, foodID))
+
+	path := fmt.Sprintf("/api/v1/foods/%d", foodID)
+	if rec := e.do(call{Method: http.MethodDelete, Path: path, Token: token}); rec.Code != http.StatusNoContent {
+		t.Fatalf("DELETE: status = %d (body: %s)", rec.Code, rec.Body.String())
+	}
+	if got := e.searchFoods(token, tag); len(got) != 0 {
+		t.Errorf("deleted food still searchable: %+v", got)
+	}
+	requireProblem(t, e.do(call{Method: http.MethodDelete, Path: path, Token: token}), http.StatusNotFound)
+
+	// History survives: the component keeps its captured values, minus the link.
+	rec := e.get(fmt.Sprintf("/api/v1/entries/%d", entry.ID), token)
+	var got v1Entry
+	decodeJSON(t, rec, &got)
+	if got.Calories != 250 || len(got.Components) != 1 || got.Components[0].FoodID != nil {
+		t.Errorf("entry after food delete = %+v, want 250 kcal and an unlinked component", got)
+	}
+}
+
+func TestV1DeleteFoodRefusesForeignAndSharedFoods(t *testing.T) {
+	e := newV1Env(t)
+	token := e.token(service.ScopeFoodsWrite)
+	tag := fmt.Sprintf("dx%d", time.Now().UnixNano()%1_000_000_000)
+
+	otherID, _ := e.seedUser("other")
+	var foreign int
+	if err := e.Pool.QueryRow(e.Ctx, `
+		INSERT INTO foods (user_id, source, name, kcal_100g) VALUES ($1, 'own', $2, 100) RETURNING id`,
+		otherID, tag+" foreign").Scan(&foreign); err != nil {
+		t.Fatal(err)
+	}
+	var shared int
+	if err := e.Pool.QueryRow(e.Ctx, `
+		INSERT INTO foods (source, source_code, name, kcal_100g) VALUES ('bls', $1, $2, 100) RETURNING id`,
+		tag, tag+" shared").Scan(&shared); err != nil {
+		t.Fatal(err)
+	}
+
+	for name, id := range map[string]int{"another account's": foreign, "shared catalog": shared} {
+		rec := e.do(call{Method: http.MethodDelete, Path: fmt.Sprintf("/api/v1/foods/%d", id), Token: token})
+		if rec.Code != http.StatusNotFound {
+			t.Errorf("%s food: status = %d, want 404", name, rec.Code)
+		}
+	}
+	requireProblem(t, e.do(call{Method: http.MethodDelete, Path: "/api/v1/foods/abc", Token: token}), http.StatusBadRequest)
+}
+
 func TestV1CreateFoodValidation(t *testing.T) {
 	e := newV1Env(t)
 	token := e.token(service.ScopeFoodsWrite)
@@ -192,6 +247,9 @@ func TestV1FoodsRequireScopes(t *testing.T) {
 	}
 	if rec := e.post("/api/v1/foods", e.token(service.ScopeFoodsRead), `{"name":"x food","calories_per_100g":1}`); rec.Code != http.StatusForbidden {
 		t.Errorf("create without foods:write: status = %d, want 403", rec.Code)
+	}
+	if rec := e.do(call{Method: http.MethodDelete, Path: "/api/v1/foods/1", Token: e.token(service.ScopeFoodsRead)}); rec.Code != http.StatusForbidden {
+		t.Errorf("delete without foods:write: status = %d, want 403", rec.Code)
 	}
 }
 
