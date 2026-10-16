@@ -1,8 +1,10 @@
 import { useState } from 'react';
 import { Link, useNavigate } from 'react-router';
 import { useTranslation } from 'react-i18next';
-import type { Entry } from '@/types';
-import { updateEntry, deleteEntry, createEntry } from '@/api/entries';
+import type { Entry, EntryDetail } from '@/types';
+import { updateEntry, deleteEntry, createEntry, getEntry } from '@/api/entries';
+import { useAuth } from '@/hooks/useAuth';
+import { restorePayload } from '@/lib/restoreEntry';
 import { saveEntryAsFood } from '@/api/savedFoods';
 import { useQueryClient } from '@tanstack/react-query';
 import { MACRO_LABELS } from '@/lib/macros';
@@ -69,6 +71,7 @@ function EntryRow({ entry, canEdit, enabledMacros, caloriesEnabled, autoCalcCalo
   const [editValue, setEditValue] = useState('');
   const [savingFood, setSavingFood] = useState(false);
   const addToast = useToastStore((s) => s.addToast);
+  const { user } = useAuth();
   const navigate = useNavigate();
   const mealPath = `/entries/${entry.id}${viewUserId ? `?user=${viewUserId}` : ''}`;
   const componentCount = entry.componentCount ?? 0;
@@ -122,20 +125,17 @@ function EntryRow({ entry, canEdit, enabledMacros, caloriesEnabled, autoCalcCalo
   };
 
   const handleDelete = async () => {
-    // Snapshot the entry so an accidental delete can be undone. The recreated
-    // entry gets a new id (the server has no soft-delete) — an acceptable
-    // trade-off, matching the saved-foods Undo pattern.
-    const snapshot: Parameters<typeof createEntry>[0] = { entry_date: entry.date };
-    if (entry.name) snapshot.entry_name = entry.name;
-    if (entry.amount) snapshot.amount = entry.amount;
-    if (entry.macros) {
-      const m = entry.macros;
-      if (m.protein != null) snapshot.protein_g = m.protein;
-      if (m.carbs != null) snapshot.carbs_g = m.carbs;
-      if (m.fat != null) snapshot.fat_g = m.fat;
-      if (m.fiber != null) snapshot.fiber_g = m.fiber;
-      if (m.sugar != null) snapshot.sugar_g = m.sugar;
+    // Read the entry as the server has it (components, exact time eaten) before it
+    // is gone, so Undo can rebuild it. If that read fails the entry still comes
+    // back, as a direct entry. The recreated entry gets a new id (the server has
+    // no soft-delete), matching the saved-foods Undo pattern.
+    let detail: EntryDetail | null = null;
+    try {
+      detail = (await getEntry(entry.id)).entry;
+    } catch {
+      // best effort
     }
+    const snapshot = restorePayload(entry, detail, user?.timezone);
 
     try {
       await deleteEntry(entry.id);

@@ -16,10 +16,28 @@ export function getDayEntries(userId: number, date: string) {
   });
 }
 
+/** One component of a new entry: a catalog food, or an ad-hoc food with its values per 100 g. */
+export type NewComponent =
+  | { food_id: number; grams: number }
+  | {
+      name: string;
+      grams: number;
+      calories_per_100g: number;
+      protein_g?: number | null;
+      carbs_g?: number | null;
+      fat_g?: number | null;
+      fiber_g?: number | null;
+      sugar_g?: number | null;
+    };
+
 export function createEntry(data: {
   amount?: number;
   entry_name?: string;
   entry_date?: string;
+  /** When it was eaten (RFC 3339 with offset); the day follows it. */
+  eaten_at?: string;
+  /** Replaces amount and macros: the entry's sum is computed from these. */
+  components?: NewComponent[];
   weight?: number;
   protein_g?: number;
   carbs_g?: number;
@@ -27,7 +45,7 @@ export function createEntry(data: {
   fiber_g?: number;
   sugar_g?: number;
 }) {
-  return api<{ ok: boolean }>('/entries', {
+  return api<{ ok: boolean; id?: number }>('/entries', {
     method: 'POST',
     body: JSON.stringify(data),
   });

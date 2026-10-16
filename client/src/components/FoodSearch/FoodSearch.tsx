@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { useQuery, keepPreviousData } from '@tanstack/react-query';
+import { useQuery } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
 import { searchFoods } from '@/api/foods';
 import type { Food } from '@/types';
@@ -59,9 +59,17 @@ export function FoodSearch({ onPick, pickLabel, autoFocus }: Props) {
     queryFn: ({ signal }) => searchFoods(term, signal),
     enabled: active,
     staleTime: 60_000,
-    placeholderData: keepPreviousData,
   });
-  const foods = active ? (data?.foods ?? []) : [];
+
+  // The hits on screen. They are replaced when the next search lands rather than
+  // dropped when the term changes, so the list does not flash empty between
+  // keystrokes; but they are cleared when the search goes idle, so an old
+  // search's hits never reappear under a new, unrelated one.
+  const [foods, setFoods] = useState<Food[]>([]);
+  useEffect(() => {
+    if (!active) setFoods([]);
+    else if (data) setFoods(data.foods);
+  }, [active, data]);
 
   const parsedGrams = parseGrams(grams);
 
@@ -165,15 +173,15 @@ export function FoodSearch({ onPick, pickLabel, autoFocus }: Props) {
         </div>
       )}
 
-      {active && !isError && foods.length === 0 && !isFetching && (
+      {active && !isError && data && data.foods.length === 0 && (
         <p className="m-0 px-1 py-2 text-sm text-muted-foreground" data-testid="food-search-empty">
           {t('foodSearch.noResults', { q: term })}
         </p>
       )}
 
-      {foods.length > 0 && (
+      {active && !isError && foods.length > 0 && (
         <ul
-          className={cn('m-0 flex list-none flex-col divide-y divide-divider p-0 transition-opacity', isFetching && 'opacity-60')}
+          className={cn('m-0 flex max-h-72 list-none flex-col divide-y divide-divider overflow-y-auto p-0 transition-opacity', isFetching && 'opacity-60')}
           aria-busy={isFetching}
           data-testid="food-search-results"
         >

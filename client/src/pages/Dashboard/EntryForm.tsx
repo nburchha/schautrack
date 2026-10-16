@@ -3,10 +3,17 @@ import { useTranslation } from 'react-i18next';
 import { useQueryClient } from '@tanstack/react-query';
 import type { AIUsage } from '@/types';
 import { createEntry } from '@/api/entries';
+import { useAuth } from '@/hooks/useAuth';
 import { createSavedFood } from '@/api/savedFoods';
 import { MACRO_LABELS, computeCaloriesFromMacros } from '@/lib/macros';
 import { parseAmount } from '@/lib/mathParser';
 import { Button } from '@/components/ui/Button';
+import { FoodSearch } from '@/components/FoodSearch/FoodSearch';
+import { MAX_DRAFT_COMPONENTS, draftName, draftPayload, draftTotals, type DraftComponent } from '@/lib/draft';
+import { formatAmount } from '@/lib/components';
+import { todayIn, toEatenAt } from '@/lib/eatenAt';
+import { cn } from '@/lib/utils';
+import type { Food } from '@/types';
 import { QuantityStepper } from '@/components/ui/QuantityStepper';
 import { useToastStore } from '@/stores/toastStore';
 import { lazyRoute } from '@/lib/lazyRoute';
@@ -41,6 +48,64 @@ const actionTileClass =
   'transition-colors hover:bg-white/[0.07] hover:text-foreground ' +
   'disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-white/[0.04] disabled:hover:text-muted-foreground';
 
+/** A past day has no "now" to fall back on, so the time starts at a plausible morning hour. */
+const PAST_DAY_TIME = '09:00';
+
+/** Grams as typed: "12,5" and "12.5" both work. null when the server would refuse the value. */
+function parseDraftGrams(raw: string): number | null {
+  const n = Number(raw.trim().replace(',', '.'));
+  const rounded = Math.round(n * 100) / 100;
+  return Number.isFinite(n) && rounded >= 0.01 && rounded <= 10000 ? rounded : null;
+}
+
+function DraftRow({ item, onGrams, onRemove }: {
+  item: DraftComponent;
+  onGrams: (grams: number) => void;
+  onRemove: () => void;
+}) {
+  const { t } = useTranslation('dashboard');
+  const [text, setText] = useState(String(item.grams));
+  const parsed = parseDraftGrams(text);
+  const kcal = ((item.food.calories_per_100g ?? 0) * (parsed ?? item.grams)) / 100;
+
+  return (
+    <li className="flex items-center gap-2 py-2" data-testid="draft-component">
+      <span className="min-w-0 flex-1 truncate text-sm text-foreground" title={item.food.name}>{item.food.name}</span>
+      <label className="flex items-center gap-1">
+        <span className="sr-only">{t('entries.draftGramsLabel', { name: item.food.name })}</span>
+        <input
+          className={cn(
+            'h-8 w-16 rounded-md border bg-muted/50 px-2 text-right text-sm tabular-nums text-foreground outline-none focus:border-ring',
+            parsed == null ? 'border-destructive' : 'border-input',
+          )}
+          inputMode="decimal"
+          value={text}
+          onChange={(e) => {
+            setText(e.target.value);
+            const g = parseDraftGrams(e.target.value);
+            if (g != null) onGrams(g);
+          }}
+          onKeyDown={(e) => { if (e.key === 'Enter') e.preventDefault(); }}
+          data-testid="draft-component-grams"
+        />
+        <span className="text-xs text-muted-foreground">g</span>
+      </label>
+      <span className="w-16 text-right text-sm tabular-nums text-muted-foreground">{formatAmount(kcal)} kcal</span>
+      <button
+        type="button"
+        className="size-7 shrink-0 cursor-pointer rounded-[10px] border border-destructive/30 bg-destructive/10 text-destructive transition-colors hover:bg-destructive/20"
+        onClick={onRemove}
+        aria-label={t('entries.draftRemoveLabel', { name: item.food.name })}
+        data-testid="draft-component-remove"
+      >
+        <svg aria-hidden="true" className="mx-auto" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+          <path d="M18 6L6 18" /><path d="M6 6l12 12" />
+        </svg>
+      </button>
+    </li>
+  );
+}
+
 export default function EntryForm({ selectedDate, caloriesEnabled, autoCalcCalories, enabledMacros, hasAiEnabled, aiUsage, aiProviderName, barcodeEnabled, onSubmit }: Props) {
   const { t } = useTranslation('dashboard');
   const [name, setName] = useState('');
@@ -53,7 +118,13 @@ export default function EntryForm({ selectedDate, caloriesEnabled, autoCalcCalor
   const [barcodeModalOpen, setBarcodeModalOpen] = useState(false);
   const [savingFood, setSavingFood] = useState(false);
   const [localAiUsage, setLocalAiUsage] = useState<AIUsage | null>(aiUsage);
+  const [draft, setDraft] = useState<DraftComponent[]>([]);
+  const [time, setTime] = useState('');
+  const timeTouched = useRef(false);
+  const draftKey = useRef(0);
   const queryClient = useQueryClient();
+  const { user } = useAuth();
+  const tz = user?.timezone;
 
   // Once a modal has been opened it stays mounted (kept alive by these latches)
   // so its existing close-cleanup effects keep running; it just isn't mounted —
@@ -71,6 +142,25 @@ export default function EntryForm({ selectedDate, caloriesEnabled, autoCalcCalor
   useEffect(() => {
     setDate(selectedDate);
   }, [selectedDate]);
+
+  // Today needs no time: the entry falls back to the moment it is created. Any
+  // other day does, so it starts at a default the user can change or clear.
+  // Once the user has touched the picker their choice stays.
+  useEffect(() => {
+    if (timeTouched.current) return;
+    setTime(date === todayIn(tz) ? '' : PAST_DAY_TIME);
+  }, [date, tz]);
+
+  const hasDraft = draft.length > 0;
+  const totals = hasDraft ? draftTotals(draft) : null;
+
+  const addToDraft = (food: Food, grams: number) => {
+    if (draft.length >= MAX_DRAFT_COMPONENTS) {
+      addToast('error', t('entries.draftFull', { max: MAX_DRAFT_COMPONENTS }));
+      throw new Error('draft full');
+    }
+    setDraft((prev) => [...prev, { key: ++draftKey.current, food, grams }]);
+  };
 
   const safeParseMacro = (val: string | undefined): number => {
     if (!val) return 0;
@@ -96,8 +186,13 @@ export default function EntryForm({ selectedDate, caloriesEnabled, autoCalcCalor
 
     const qty = Math.max(1, Math.trunc(quantity));
     const data: Parameters<typeof createEntry>[0] = { entry_date: date };
+    if (time) data.eaten_at = toEatenAt(date, time, tz);
     if (name.trim()) data.entry_name = name.trim();
-    if (amount && !autoCalcCalories) {
+    if (hasDraft) {
+      // The server computes calories and macros from the components.
+      data.components = draftPayload(draft);
+      if (!data.entry_name) data.entry_name = draftName(draft);
+    } else if (amount && !autoCalcCalories) {
       const parsed = parseAmount(amount, { maxAbs: 100000 });
       if (!parsed.ok) {
         addToast('error', t('entries.toastInvalidCalorieAmount'));
@@ -106,7 +201,7 @@ export default function EntryForm({ selectedDate, caloriesEnabled, autoCalcCalor
       }
       data.amount = parsed.value * qty;
     }
-    for (const key of enabledMacros) {
+    for (const key of hasDraft ? [] : enabledMacros) {
       if (macros[key]) {
         const parsed = Number(macros[key]);
         if (!Number.isFinite(parsed)) {
@@ -125,6 +220,9 @@ export default function EntryForm({ selectedDate, caloriesEnabled, autoCalcCalor
       setAmount('');
       setMacros({});
       setQuantity(1);
+      setDraft([]);
+      timeTouched.current = false;
+      setTime(date === todayIn(tz) ? '' : PAST_DAY_TIME);
       onSubmit();
       addToast('success', t('entries.toastTracked'));
     } catch (err) {
@@ -147,8 +245,9 @@ export default function EntryForm({ selectedDate, caloriesEnabled, autoCalcCalor
     }
   };
 
-  const hasInput = !!(amount || computedCalories || Object.values(macros).some((v) => v));
-  const canSaveAsFood = !!(name.trim() && hasInput);
+  const hasDirectInput = !!(amount || computedCalories || Object.values(macros).some((v) => v));
+  const hasInput = hasDraft || hasDirectInput;
+  const canSaveAsFood = !!(name.trim() && hasDirectInput && !hasDraft);
   const aiDisabled = hasAiEnabled && localAiUsage && localAiUsage.limit > 0 && localAiUsage.remaining === 0;
 
   const showQtyPreview = quantity > 1 && enabledMacros.some((k) => macros[k]);
@@ -184,7 +283,24 @@ export default function EntryForm({ selectedDate, caloriesEnabled, autoCalcCalor
 
   return (
     <>
-      <form onSubmit={handleSubmit} className="flex flex-col pt-1">
+      {/* Catalog search sits outside the <form> so Enter in it never submits the entry. */}
+      <div className="mb-3 flex flex-col gap-2 pt-1" data-testid="entry-form-search">
+        <FoodSearch onPick={addToDraft} pickLabel={t('entries.addToDraft')} />
+        {hasDraft && (
+          <ul className="m-0 flex list-none flex-col divide-y divide-divider p-0" data-testid="draft-list">
+            {draft.map((item) => (
+              <DraftRow
+                key={item.key}
+                item={item}
+                onGrams={(grams) => setDraft((prev) => prev.map((d) => (d.key === item.key ? { ...d, grams } : d)))}
+                onRemove={() => setDraft((prev) => prev.filter((d) => d.key !== item.key))}
+              />
+            ))}
+          </ul>
+        )}
+      </div>
+
+      <form onSubmit={handleSubmit} className="flex flex-col">
         {/* Food name + Quantity */}
         <div className="mb-3 flex items-end gap-2">
           <div className="flex flex-1 flex-col">
@@ -199,10 +315,12 @@ export default function EntryForm({ selectedDate, caloriesEnabled, autoCalcCalor
               maxLength={120}
             />
           </div>
-          <div className="flex flex-col gap-1">
-            <label className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">{t('entries.qtyLabel')}</label>
-            <QuantityStepper value={quantity} onChange={setQuantity} />
-          </div>
+          {!hasDraft && (
+            <div className="flex flex-col gap-1">
+              <label className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">{t('entries.qtyLabel')}</label>
+              <QuantityStepper value={quantity} onChange={setQuantity} />
+            </div>
+          )}
         </div>
 
         {/* Calories */}
@@ -211,13 +329,13 @@ export default function EntryForm({ selectedDate, caloriesEnabled, autoCalcCalor
             <label htmlFor="entry-calories" className="text-xs font-semibold uppercase tracking-wider text-macro-kcal">{t('entries.caloriesLabel')}</label>
             <input
               id="entry-calories"
-              className={`${inputClass} ${autoCalcCalories ? 'opacity-60 cursor-not-allowed' : ''}`}
+              className={`${inputClass} ${autoCalcCalories || hasDraft ? 'opacity-60 cursor-not-allowed' : ''}`}
               type="text"
               inputMode="tel"
               placeholder="0"
-              value={autoCalcCalories ? (computedCalories ?? '') : amount}
+              value={totals ? Math.round(totals.kcal) : autoCalcCalories ? (computedCalories ?? '') : amount}
               onChange={(e) => setAmount(e.target.value)}
-              readOnly={autoCalcCalories}
+              readOnly={autoCalcCalories || hasDraft}
             />
           </div>
         )}
@@ -244,12 +362,13 @@ export default function EntryForm({ selectedDate, caloriesEnabled, autoCalcCalor
                   </label>
                   <input
                     id={`entry-macro-${key}`}
-                    className={inputClass}
+                    className={`${inputClass} ${hasDraft ? 'opacity-60 cursor-not-allowed' : ''}`}
                     type="text"
                     inputMode="numeric"
                     placeholder="0"
-                    value={macros[key] || ''}
+                    value={totals ? (totals.macros[key as keyof typeof totals.macros] != null ? Math.round(totals.macros[key as keyof typeof totals.macros] ?? 0) : '') : macros[key] || ''}
                     onChange={(e) => handleMacroChange(key, e.target.value)}
+                    readOnly={hasDraft}
                   />
                 </div>
               );
@@ -266,13 +385,38 @@ export default function EntryForm({ selectedDate, caloriesEnabled, autoCalcCalor
 
         {/* Date + AI + Submit */}
         <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
-          <input
-            type="date"
-            aria-label={t('entries.entryDateAriaLabel')}
-            className="rounded-md border border-input bg-muted/50 px-2 py-1.5 text-sm text-foreground outline-none focus:border-ring focus:ring-1 focus:ring-ring"
-            value={date}
-            onChange={(e) => setDate(e.target.value)}
-          />
+          <div className="flex flex-wrap items-center gap-2">
+            <input
+              type="date"
+              aria-label={t('entries.entryDateAriaLabel')}
+              className="rounded-md border border-input bg-muted/50 px-2 py-1.5 text-sm text-foreground outline-none focus:border-ring focus:ring-1 focus:ring-ring"
+              value={date}
+              onChange={(e) => setDate(e.target.value)}
+            />
+            <div className="flex items-center gap-1" data-testid="entry-form-time">
+              <input
+                type="time"
+                aria-label={t('entries.timeLabel')}
+                className="rounded-md border border-input bg-muted/50 px-2 py-1.5 text-sm text-foreground outline-none focus:border-ring focus:ring-1 focus:ring-ring"
+                value={time}
+                onChange={(e) => { timeTouched.current = true; setTime(e.target.value); }}
+                data-testid="entry-form-time-input"
+              />
+              {time && (
+                <button
+                  type="button"
+                  className="size-7 shrink-0 cursor-pointer rounded-[10px] border border-border text-muted-foreground transition-colors hover:text-foreground"
+                  onClick={() => { timeTouched.current = true; setTime(''); }}
+                  aria-label={t('entries.timeClearLabel')}
+                  data-testid="entry-form-time-clear"
+                >
+                  <svg aria-hidden="true" className="mx-auto" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M18 6L6 18" /><path d="M6 6l12 12" />
+                  </svg>
+                </button>
+              )}
+            </div>
+          </div>
 
           <div className="flex items-center gap-2 sm:ml-auto">
             {hasAiEnabled && (
@@ -280,7 +424,7 @@ export default function EntryForm({ selectedDate, caloriesEnabled, autoCalcCalor
                 type="button"
                 className={`relative ${actionTileClass}`}
                 onClick={() => setAiModalOpen(true)}
-                disabled={!!aiDisabled}
+                disabled={!!aiDisabled || hasDraft}
                 aria-label={t('entries.estimateAiAriaLabel')}
                 title={aiDisabled ? t('entries.aiLimitReachedTitle') : t('entries.estimateAiTitle')}
               >
@@ -301,6 +445,7 @@ export default function EntryForm({ selectedDate, caloriesEnabled, autoCalcCalor
                 type="button"
                 className={actionTileClass}
                 onClick={() => setBarcodeModalOpen(true)}
+                disabled={hasDraft}
                 aria-label={t('entries.scanBarcodeLabel')}
                 title={t('entries.scanBarcodeLabel')}
               >

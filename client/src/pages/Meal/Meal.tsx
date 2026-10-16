@@ -9,7 +9,6 @@ import { useToastStore } from '@/stores/toastStore';
 import { kcalShares } from '@/lib/components';
 import { formatDate } from '@/lib/format';
 import { localTimeOf, toEatenAt } from '@/lib/eatenAt';
-import { TimePicker } from '@/components/ui/TimePicker';
 import { QueryError } from '@/components/ui/QueryError';
 import { SectionLabel } from '@/components/ui/SectionLabel';
 import { Button } from '@/components/ui/Button';
@@ -61,7 +60,7 @@ export default function Meal() {
     setBusy(false);
   };
 
-  // The picker reports every tap; the write happens once, when it closes.
+  // The input reports every edit; the write happens once, when it loses focus.
   const saveTime = async (entry: EntryDetailResponse['entry']) => {
     const draft = timeDraft;
     setTimeDraft(null);
@@ -131,11 +130,16 @@ export default function Meal() {
           </p>
           {canEdit && (
             <div className="mt-2" data-testid="meal-time">
-              <TimePicker
+              <input
+                type="time"
+                aria-label={t('meal.timeLabel')}
+                className="rounded-md border border-input bg-muted/50 px-2 py-1.5 text-sm text-foreground outline-none focus:border-ring focus:ring-1 focus:ring-ring disabled:opacity-60"
                 value={timeDraft ?? localTimeOf(entry.eaten_at, user?.timezone)}
-                onChange={setTimeDraft}
-                onClose={() => void saveTime(entry)}
-                label={t('meal.timeLabel')}
+                onChange={(e) => setTimeDraft(e.target.value)}
+                onBlur={() => void saveTime(entry)}
+                onKeyDown={(e) => { if (e.key === 'Enter') e.currentTarget.blur(); }}
+                disabled={busy}
+                data-testid="meal-time-input"
               />
             </div>
           )}

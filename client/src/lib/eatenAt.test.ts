@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { localTimeOf, toEatenAt } from './eatenAt';
+import { localDateOf, localTimeOf, todayIn, toEatenAt } from './eatenAt';
 
 describe('toEatenAt', () => {
   it('uses the summer offset of the zone', () => {
@@ -38,5 +38,17 @@ describe('localTimeOf', () => {
 
   it('shows midnight as 00:00, not 24:00', () => {
     expect(localTimeOf('2026-08-04T22:00:00Z', 'Europe/Berlin')).toBe('00:00');
+  });
+});
+
+describe('localDateOf / todayIn', () => {
+  it('reads the calendar day in the zone, not in UTC', () => {
+    // 23:30 UTC is already the next day in Berlin.
+    expect(localDateOf('2026-08-04T23:30:00Z', 'Europe/Berlin')).toBe('2026-08-05');
+    expect(localDateOf('2026-08-04T23:30:00Z', 'America/New_York')).toBe('2026-08-04');
+  });
+
+  it('todayIn is a YYYY-MM-DD date', () => {
+    expect(todayIn('Europe/Berlin')).toMatch(/^\d{4}-\d{2}-\d{2}$/);
   });
 });

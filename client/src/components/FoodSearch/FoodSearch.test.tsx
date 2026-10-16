@@ -61,6 +61,23 @@ describe('FoodSearch', () => {
     release({ ok: true, foods: [oats] });
   });
 
+  it('does not bring an earlier search\'s hits back under a new one', async () => {
+    vi.mocked(searchFoods)
+      .mockResolvedValueOnce({ ok: true, foods: [oats] })
+      .mockImplementationOnce(() => new Promise(() => {})); // the second search never answers
+    renderSearch();
+    const input = screen.getByTestId('food-search-input');
+    await userEvent.type(input, 'Haf');
+    await screen.findByText('Hafer Flocken');
+
+    await userEvent.clear(input);
+    await waitFor(() => expect(screen.queryByText('Hafer Flocken')).not.toBeInTheDocument());
+
+    await userEvent.type(input, 'Mil');
+    await waitFor(() => expect(searchFoods).toHaveBeenCalledTimes(2));
+    expect(screen.queryByText('Hafer Flocken')).not.toBeInTheDocument();
+  });
+
   it('says so when nothing matches', async () => {
     vi.mocked(searchFoods).mockResolvedValue({ ok: true, foods: [] });
     renderSearch();

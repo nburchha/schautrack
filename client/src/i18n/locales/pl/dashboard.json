@@ -113,7 +113,13 @@
     "componentCount_many": "{{count}} składników",
     "componentCount_other": "{{count}} składnika",
     "openMeal": "Otwórz szczegóły: {{name}}",
-    "openMealTitle": "Pokaż składniki i makroskładniki"
+    "openMealTitle": "Pokaż składniki i makroskładniki",
+    "addToDraft": "Dodaj",
+    "draftFull": "Posiłek może mieć najwyżej {{max}} składników.",
+    "draftGramsLabel": "Gramy: {{name}}",
+    "draftRemoveLabel": "Usuń {{name}}",
+    "timeLabel": "Godzina posiłku",
+    "timeClearLabel": "Wyczyść godzinę"
   },
   "foodSearch": {
     "ariaLabel": "Szukaj w katalogu produktów",
