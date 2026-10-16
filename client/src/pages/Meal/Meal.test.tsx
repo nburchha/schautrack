@@ -14,9 +14,13 @@ vi.mock('@/api/entries', () => ({
   getEntry: vi.fn(),
   updateComponentGrams: vi.fn(),
   deleteComponent: vi.fn(),
+  addComponent: vi.fn(),
+  setEatenAt: vi.fn(),
 }));
+vi.mock('@/api/foods', () => ({ searchFoods: vi.fn() }));
 
-import { deleteComponent, getEntry, updateComponentGrams } from '@/api/entries';
+import { addComponent, deleteComponent, getEntry, setEatenAt, updateComponentGrams } from '@/api/entries';
+import { searchFoods } from '@/api/foods';
 
 const oats: EntryComponent = {
   id: 11, food_id: 5, name: 'Oats', grams: 50, calories_per_100g: 372,
@@ -59,6 +63,9 @@ describe('Meal page', () => {
     vi.mocked(getEntry).mockReset();
     vi.mocked(updateComponentGrams).mockReset();
     vi.mocked(deleteComponent).mockReset();
+    vi.mocked(addComponent).mockReset();
+    vi.mocked(setEatenAt).mockReset();
+    vi.mocked(searchFoods).mockReset();
   });
 
   it('shows the meal totals, including fiber, and one card per component', async () => {
@@ -142,13 +149,57 @@ describe('Meal page', () => {
     expect(within(screen.getByTestId('meal-total-fiber')).getByText('5')).toBeInTheDocument();
   });
 
-  it('links the plus button to the add-component route, which renders a placeholder', async () => {
-    vi.mocked(getEntry).mockResolvedValue(detail([oats]));
+  it('adds a catalog food from the search page and returns to the meal', async () => {
+    // The meal page refetches after the add, so the server's second answer has the new component.
+    const banana = { ...milk, id: 13, food_id: 9, name: 'Banana', grams: 120 };
+    vi.mocked(getEntry).mockResolvedValueOnce(detail([oats])).mockResolvedValue(detail([oats, banana]));
+    vi.mocked(searchFoods).mockResolvedValue({
+      ok: true,
+      foods: [{
+        id: 9, source: 'bls', source_code: 'H1', name: 'Banana', source_classification: 'F',
+        calories_per_100g: 90, macros_per_100g: { protein_g: 1, carbs_g: 20, fat_g: 0.3, fiber_g: 2, sugar_g: 12 },
+      }],
+    });
+    vi.mocked(addComponent).mockResolvedValue(detail([oats, banana]));
     renderPage();
 
     await userEvent.click(await screen.findByTestId('meal-add-component'));
-    expect(await screen.findByTestId('add-component-placeholder')).toBeInTheDocument();
-    await userEvent.click(screen.getByTestId('add-component-back'));
+    await userEvent.type(await screen.findByTestId('food-search-input'), 'Ban');
+    await userEvent.click(await screen.findByTestId('food-search-result'));
+
+    const grams = screen.getByTestId('food-search-grams');
+    await userEvent.clear(grams);
+    await userEvent.type(grams, '120');
+    expect(screen.getByTestId('food-search-kcal')).toHaveTextContent('108');
+    await userEvent.click(screen.getByTestId('food-search-add'));
+
+    await waitFor(() => expect(addComponent).toHaveBeenCalledWith(7, { food_id: 9, grams: 120 }));
     expect(await screen.findByTestId('meal-title')).toBeInTheDocument();
+    expect(await screen.findAllByTestId('meal-component')).toHaveLength(2);
+  });
+
+  it('goes back to the meal from the add page without adding anything', async () => {
+    vi.mocked(getEntry).mockResolvedValue(detail([oats]));
+    renderPage('/entries/7/add');
+
+    await userEvent.click(await screen.findByTestId('add-component-back'));
+    expect(await screen.findByTestId('meal-title')).toBeInTheDocument();
+    expect(addComponent).not.toHaveBeenCalled();
+  });
+
+  it('saves the eaten time once, when the picker closes', async () => {
+    vi.mocked(getEntry).mockResolvedValue(detail([oats]));
+    vi.mocked(setEatenAt).mockResolvedValue({ ok: true });
+    renderPage();
+
+    await userEvent.click(within(await screen.findByTestId('meal-time')).getByTestId('time-picker-trigger'));
+    await userEvent.click(screen.getByRole('button', { name: '08' }));
+    // "15" is both an hour and a minute chip; the minute grid comes second.
+    await userEvent.click(screen.getAllByRole('button', { name: '15' })[1]);
+    expect(setEatenAt).not.toHaveBeenCalled();
+    await userEvent.click(screen.getByRole('button', { name: /done|fertig/i }));
+
+    await waitFor(() => expect(setEatenAt).toHaveBeenCalledTimes(1));
+    expect(setEatenAt).toHaveBeenCalledWith(7, expect.stringMatching(/^2026-08-30T08:15:00[+-]\d\d:\d\d$/));
   });
 });

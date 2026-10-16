@@ -120,7 +120,7 @@ test.describe('Meal detail page', () => {
     await context.close();
   });
 
-  test('a direct entry explains itself and the plus button leads to the search placeholder', async ({ browser }) => {
+  test('a direct entry explains itself and the plus button leads to the food search', async ({ browser }) => {
     const { context, page } = await loginUser(browser, user.email, user.password);
     await page.goto(`/entries/${directId}`);
 
@@ -129,7 +129,7 @@ test.describe('Meal detail page', () => {
 
     await page.getByTestId('meal-add-component').click();
     await expect(page).toHaveURL(new RegExp(`/entries/${directId}/add$`));
-    await expect(page.getByTestId('add-component-placeholder')).toBeVisible();
+    await expect(page.getByTestId('food-search-input')).toBeVisible();
     await page.getByTestId('add-component-back').click();
     await expect(page.getByTestId('meal-direct')).toBeVisible();
     await context.close();

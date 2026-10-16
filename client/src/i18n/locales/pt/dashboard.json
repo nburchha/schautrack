@@ -109,11 +109,32 @@
     "openMeal": "Abrir detalhes de {{name}}",
     "openMealTitle": "Mostrar componentes e macros"
   },
+  "foodSearch": {
+    "ariaLabel": "Pesquisar no catálogo de alimentos",
+    "back": "Outro alimento",
+    "error": "A pesquisa falhou.",
+    "gramsLabel": "Gramas de {{name}}",
+    "hint": "Escreva pelo menos {{min}} letras.",
+    "invalidGrams": "Introduza entre {{min}} e {{max}} gramas.",
+    "noKcal": "Sem valor calórico",
+    "noResults": "Nenhum alimento encontrado para “{{q}}”.",
+    "per100g": "{{kcal}} kcal / 100 g",
+    "placeholder": "Pesquisar alimentos, ex.: aveia",
+    "portionKcal": "{{kcal}} kcal",
+    "retry": "Tentar novamente",
+    "source": {
+      "bls": "BLS",
+      "off": "OFF",
+      "own": "Próprio"
+    }
+  },
   "meal": {
     "addPage": {
       "back": "Voltar à refeição",
-      "soon": "A pesquisa de alimentos chega em breve. Aqui vais montar esta refeição a partir do catálogo.",
-      "title": "Adicionar componente"
+      "title": "Adicionar componente",
+      "add": "Adicionar",
+      "toastAdded": "{{name}} adicionado",
+      "toastFailed": "Não foi possível adicionar o componente"
     },
     "back": "Voltar ao dia",
     "components": {
@@ -146,7 +167,9 @@
     },
     "toastDeleteFailed": "Não foi possível remover o componente",
     "toastUpdateFailed": "Não foi possível alterar a quantidade",
-    "untitled": "Refeição"
+    "untitled": "Refeição",
+    "timeLabel": "Hora da refeição",
+    "toastTimeFailed": "Não foi possível alterar a hora"
   },
   "notes": {
     "sectionTitle": "Notas",

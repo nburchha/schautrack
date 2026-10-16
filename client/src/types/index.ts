@@ -62,6 +62,17 @@ export interface EntryComponent {
   macros_per_100g: ComponentMacros;
 }
 
+/** A catalog food: nutrients per 100 g. null means the source does not know the value. */
+export interface Food {
+  id: number;
+  source: 'bls' | 'off' | 'own';
+  source_code: string | null;
+  name: string;
+  source_classification: string | null;
+  calories_per_100g: number | null;
+  macros_per_100g: ComponentMacros;
+}
+
 /** The meal detail payload (GET /api/entries/:id). Shares the v1 entry shape. */
 export interface EntryDetail {
   id: number;

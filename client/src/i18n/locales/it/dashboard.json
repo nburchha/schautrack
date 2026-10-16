@@ -109,11 +109,32 @@
     "openMeal": "Apri i dettagli di {{name}}",
     "openMealTitle": "Mostra componenti e macro"
   },
+  "foodSearch": {
+    "ariaLabel": "Cerca nel catalogo degli alimenti",
+    "back": "Altro alimento",
+    "error": "Ricerca non riuscita.",
+    "gramsLabel": "Grammi di {{name}}",
+    "hint": "Digita almeno {{min}} lettere.",
+    "invalidGrams": "Inserisci tra {{min}} e {{max}} grammi.",
+    "noKcal": "Nessun valore calorico",
+    "noResults": "Nessun alimento trovato per «{{q}}».",
+    "per100g": "{{kcal}} kcal / 100 g",
+    "placeholder": "Cerca alimenti, ad es. fiocchi d'avena",
+    "portionKcal": "{{kcal}} kcal",
+    "retry": "Riprova",
+    "source": {
+      "bls": "BLS",
+      "off": "OFF",
+      "own": "Proprio"
+    }
+  },
   "meal": {
     "addPage": {
       "back": "Torna al pasto",
-      "soon": "La ricerca degli alimenti arriverà presto. Qui comporrai questo pasto dal catalogo.",
-      "title": "Aggiungi componente"
+      "title": "Aggiungi componente",
+      "add": "Aggiungi",
+      "toastAdded": "{{name}} aggiunto",
+      "toastFailed": "Impossibile aggiungere il componente"
     },
     "back": "Torna al giorno",
     "components": {
@@ -146,7 +167,9 @@
     },
     "toastDeleteFailed": "Impossibile rimuovere il componente",
     "toastUpdateFailed": "Impossibile modificare la quantità",
-    "untitled": "Pasto"
+    "untitled": "Pasto",
+    "timeLabel": "Ora del pasto",
+    "toastTimeFailed": "Impossibile cambiare l'ora"
   },
   "notes": {
     "sectionTitle": "Note",

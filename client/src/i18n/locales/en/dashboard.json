@@ -109,11 +109,32 @@
     "undoLabel": "Undo",
     "unnamedEntryFallback": "entry"
   },
+  "foodSearch": {
+    "ariaLabel": "Search the food catalog",
+    "back": "Change food",
+    "error": "Search failed.",
+    "gramsLabel": "Grams of {{name}}",
+    "hint": "Type at least {{min}} letters to search.",
+    "invalidGrams": "Enter between {{min}} and {{max}} grams.",
+    "noKcal": "No calorie value",
+    "noResults": "No foods found for “{{q}}”.",
+    "per100g": "{{kcal}} kcal / 100 g",
+    "placeholder": "Search foods, e.g. oats",
+    "portionKcal": "{{kcal}} kcal",
+    "retry": "Retry",
+    "source": {
+      "bls": "BLS",
+      "off": "OFF",
+      "own": "Own"
+    }
+  },
   "meal": {
     "addPage": {
+      "add": "Add",
       "back": "Back to meal",
-      "soon": "Food search is coming soon. You will build this meal from the catalog right here.",
-      "title": "Add component"
+      "title": "Add component",
+      "toastAdded": "{{name}} added",
+      "toastFailed": "Could not add the component"
     },
     "back": "Back to day",
     "components": {
@@ -144,7 +165,9 @@
       "noEnergySplit": "Not enough macro data to split the energy.",
       "title": "Summary"
     },
+    "timeLabel": "Time eaten",
     "toastDeleteFailed": "Failed to remove the component",
+    "toastTimeFailed": "Could not change the time",
     "toastUpdateFailed": "Failed to update the amount",
     "untitled": "Meal"
   },

@@ -26,15 +26,22 @@ function split(value: string): [string, string] {
  * actually needs. A value already stored off that grid keeps its own chip, so
  * opening the picker can never silently round someone's existing time.
  */
-export function TimePicker({ value, onChange, onClear, label }: {
+export function TimePicker({ value, onChange, onClear, onClose, label }: {
   value: string;
   onChange: (value: string) => void;
-  onClear: () => void;
+  /** Omit when a time is always required: the Clear button is then not shown. */
+  onClear?: () => void;
+  /** Called once the sheet is dismissed, so a caller can save the final pick instead of every tap. */
+  onClose?: () => void;
   label: string;
 }) {
   const { t } = useTranslation('dashboard');
   const [open, setOpen] = useState(false);
   const [hour, minute] = split(value);
+  const close = () => {
+    setOpen(false);
+    onClose?.();
+  };
 
   const minutes = minute && !MINUTES.includes(minute) ? [...MINUTES, minute].sort() : MINUTES;
 
@@ -72,7 +79,7 @@ export function TimePicker({ value, onChange, onClear, label }: {
         {value || t('todos.setTimeButton')}
       </button>
 
-      <Sheet open={open} onClose={() => setOpen(false)} title={label}>
+      <Sheet open={open} onClose={close} title={label}>
         <div className="flex flex-col gap-4">
           <div className="flex flex-col gap-2">
             <span className="text-xs font-medium uppercase tracking-wider text-muted-foreground">{t('todos.hourLabel')}</span>
@@ -97,16 +104,18 @@ export function TimePicker({ value, onChange, onClear, label }: {
           </div>
 
           <div className="flex items-center justify-between gap-2">
-            <Button
-              type="button"
-              size="sm"
-              variant="ghost"
-              disabled={!value}
-              onClick={() => { onClear(); setOpen(false); }}
-            >
-              {t('todos.clearButton')}
-            </Button>
-            <Button type="button" size="sm" onClick={() => setOpen(false)}>{t('todos.doneButton')}</Button>
+            {onClear ? (
+              <Button
+                type="button"
+                size="sm"
+                variant="ghost"
+                disabled={!value}
+                onClick={() => { onClear(); close(); }}
+              >
+                {t('todos.clearButton')}
+              </Button>
+            ) : <span />}
+            <Button type="button" size="sm" onClick={close}>{t('todos.doneButton')}</Button>
           </div>
         </div>
       </Sheet>
