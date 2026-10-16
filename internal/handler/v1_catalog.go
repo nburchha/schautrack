@@ -215,3 +215,27 @@ func (h *V1Handler) CreateFoodV1(w http.ResponseWriter, r *http.Request) {
 
 	writeV1(w, http.StatusCreated, f)
 }
+
+// DeleteFoodV1 handles DELETE /api/v1/foods/{id}: remove a food of the caller's
+// own. Shared catalog foods (bls, off) and other accounts' foods answer 404, so
+// the route cannot probe for ids. Entry components that used the food keep
+// their captured values and just lose the link (food_id ON DELETE SET NULL).
+func (h *V1Handler) DeleteFoodV1(w http.ResponseWriter, r *http.Request) {
+	id, prob := pathID(r)
+	if prob != nil {
+		apierr.Write(w, r, prob)
+		return
+	}
+	user := v1User(r)
+	tag, err := h.Pool.Exec(r.Context(),
+		"DELETE FROM foods WHERE id = $1 AND user_id = $2 AND source = 'own'", id, user.ID)
+	if err != nil {
+		apierr.Write(w, r, dbFail("delete food", err))
+		return
+	}
+	if tag.RowsAffected() == 0 {
+		apierr.Write(w, r, apierr.NotFound("No food of yours with that id."))
+		return
+	}
+	noContent(w)
+}
