@@ -213,6 +213,9 @@ unversioned and changes freely; this one is a contract.
 5. **Tokens cannot mint tokens.** Token management (`/api/tokens`) lives on the
    session surface and is step-up gated. If a token could create another token, one
    leaked read-only token would escalate to a permanent full-scope one.
+   Provisioning for deployments is `cmd/mint-token`: a command run by the operator
+   with database access (like `cmd/import-foods`), not an HTTP route. It uses
+   `service.EnsureAPIToken` and is idempotent.
 6. **Non-idempotent creates must honour `Idempotency-Key`.** `POST /entries`,
    `POST /todos`, `POST /saved-foods`, and `POST /saved-foods/{id}/track` are wrapped
    in `withIdempotency`. If you add another endpoint that creates something, wrap it
