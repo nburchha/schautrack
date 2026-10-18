@@ -31,6 +31,43 @@ type v1SettingsPatch struct {
 	Timezone   *string          `json:"timezone"`
 	WeightUnit *string          `json:"weight_unit"`
 	Language   Optional[string] `json:"language"`
+	// Goals merges Basisziel macro goals (ADR 0007). Calories stay on
+	// DailyGoal. Needs goals:write on top of settings:write.
+	Goals *v1GoalsPatch `json:"goals"`
+}
+
+// v1GoalsPatch is the macro part of the Basisziel. Each key is Optional so an
+// explicit null clears that goal while an absent key leaves it alone.
+type v1GoalsPatch struct {
+	Protein Optional[int] `json:"protein"`
+	Carbs   Optional[int] `json:"carbs"`
+	Fat     Optional[int] `json:"fat"`
+	Fiber   Optional[int] `json:"fiber"`
+	Sugar   Optional[int] `json:"sugar"`
+}
+
+// fields pairs each macro key with its patch value, in service.MacroKeys order.
+func (g *v1GoalsPatch) fields() []struct {
+	Key string
+	Val Optional[int]
+} {
+	if g == nil {
+		return nil
+	}
+	all := []Optional[int]{g.Protein, g.Carbs, g.Fat, g.Fiber, g.Sugar}
+	var out []struct {
+		Key string
+		Val Optional[int]
+	}
+	for i, key := range service.MacroKeys {
+		if all[i].Set {
+			out = append(out, struct {
+				Key string
+				Val Optional[int]
+			}{key, all[i]})
+		}
+	}
+	return out
 }
 
 // UpdateMeV1 handles PATCH /api/v1/me.
@@ -48,6 +85,23 @@ func (h *V1Handler) UpdateMeV1(w http.ResponseWriter, r *http.Request) {
 		sets = append(sets, fmt.Sprintf("%s = $%d", col, len(args)))
 	}
 
+	// Every change to users.macro_goals is composed into ONE expression: the
+	// column can be assigned only once per UPDATE, and each step merges a key
+	// into what the previous step produced. It is never replaced wholesale
+	// (unlike the Settings form), so the *_mode keys and every macro goal not
+	// named in the request survive.
+	mgExpr := "COALESCE(macro_goals, '{}'::jsonb)"
+	mgTouched := false
+	putGoal := func(key string, v *int) {
+		mgTouched = true
+		if v == nil || *v == 0 { // null and 0 both mean "no goal": drop the key
+			mgExpr = fmt.Sprintf("(%s - '%s')", mgExpr, key)
+			return
+		}
+		args = append(args, *v)
+		mgExpr = fmt.Sprintf("jsonb_set(%s, '{%s}', to_jsonb($%d::int))", mgExpr, key, len(args))
+	}
+
 	// The effective goal lives in macro_goals.calories (service.GetCalorieGoal
 	// prefers it and ignores the legacy column once it exists), so that is the
 	// key written here. The legacy column is nulled to match the startup
@@ -55,7 +109,7 @@ func (h *V1Handler) UpdateMeV1(w http.ResponseWriter, r *http.Request) {
 	if in.DailyGoal.Set {
 		if in.DailyGoal.Value == nil {
 			set("daily_goal", nil)
-			sets = append(sets, "macro_goals = COALESCE(macro_goals, '{}'::jsonb) - 'calories'")
+			putGoal("calories", nil)
 		} else if v := *in.DailyGoal.Value; v < 1 || v > MaxEntryCalories {
 			apierr.Write(w, r, apierr.Unprocessable("The daily goal is out of range.",
 				apierr.InvalidParam{
@@ -65,10 +119,45 @@ func (h *V1Handler) UpdateMeV1(w http.ResponseWriter, r *http.Request) {
 			return
 		} else {
 			set("daily_goal", nil)
-			args = append(args, v)
-			sets = append(sets, fmt.Sprintf(
-				"macro_goals = jsonb_set(COALESCE(macro_goals, '{}'::jsonb), '{calories}', to_jsonb($%d::int))", len(args)))
+			putGoal("calories", &v)
 		}
+	}
+
+	if macros := in.Goals.fields(); len(macros) > 0 {
+		// Route scope is settings:write; changing the Basisziel macros is a
+		// goals matter, so it needs its own scope. A token that may only change
+		// the calorie goal or timezone must not be able to move macro targets.
+		if token := middleware.GetAPIToken(r); token == nil || !service.ScopeSatisfies(token.Scopes, service.ScopeGoalsWrite) {
+			apierr.Write(w, r, apierr.InsufficientScope(service.ScopeGoalsWrite))
+			return
+		}
+		user := v1User(r)
+		enabled := map[string]bool{}
+		for _, k := range service.GetEnabledMacros(service.ParseMacroUser(user.MacrosEnabled, user.MacroGoals, user.DailyGoal, user.GoalThreshold)) {
+			enabled[k] = true
+		}
+		for _, f := range macros {
+			name := "goals." + f.Key
+			if f.Val.Value != nil {
+				if v := *f.Val.Value; v < 0 || v > service.MaxGoalMacro {
+					apierr.Write(w, r, apierr.Unprocessable("The goal value is not usable.",
+						apierr.InvalidParam{
+							Name:   name,
+							Reason: fmt.Sprintf("must be a whole number from 0 to %d (0 means no goal)", service.MaxGoalMacro),
+						}))
+					return
+				}
+				if !enabled[f.Key] {
+					apierr.Write(w, r, apierr.Unprocessable("The goal value is not usable.",
+						apierr.InvalidParam{Name: name, Reason: "this macro is not enabled for the account"}))
+					return
+				}
+			}
+			putGoal(f.Key, f.Val.Value)
+		}
+	}
+	if mgTouched {
+		sets = append(sets, "macro_goals = "+mgExpr)
 	}
 
 	if in.Timezone != nil {
@@ -331,6 +420,7 @@ func (h *V1Handler) buildMe(r *http.Request, user *model.User) v1Me {
 	out.User.WeightUnit = unit
 	out.User.DailyGoal = service.GetCalorieGoal(
 		service.ParseMacroUser(user.MacrosEnabled, user.MacroGoals, user.DailyGoal, user.GoalThreshold))
+	out.User.Goals = toV1GoalValues(service.BaseGoal(user))
 	out.User.Language = user.Language
 
 	// The three stored booleans map straight across. Macros do not: the column

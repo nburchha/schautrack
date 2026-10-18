@@ -204,6 +204,9 @@ func TestMeMatchesSchema(t *testing.T) {
 	me.User.Timezone = "Europe/Berlin"
 	me.User.WeightUnit = "kg"
 	me.User.DailyGoal = ptr(2000)
+	me.User.Goals = v1GoalValues{
+		Calories: ptr(2000), Protein: ptr(150), Carbs: ptr(250), Fat: ptr(70), Fiber: ptr(30), Sugar: ptr(40),
+	}
 	me.User.Language = ptr("en")
 	me.Token.ID = 1
 	me.Token.Name = "Home Assistant"
@@ -223,6 +226,7 @@ func TestMeMatchesSchema(t *testing.T) {
 	// accidentally omitted by an `omitempty`.
 	me.Token.ExpiresAt = nil
 	me.User.DailyGoal = nil
+	me.User.Goals = v1GoalValues{}
 	me.User.Language = nil
 	me.Features = v1Features{}
 	checkSchema(t, "Me", me)

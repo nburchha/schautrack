@@ -112,6 +112,14 @@ func baseGoalValues(u MacroUser) GoalValues {
 	return v
 }
 
+// BaseGoal is the raw Basisziel of user: every key, enabled or not. Unlike
+// ResolveDayGoal it is not filtered by the macros the account tracks, because
+// its consumers (GET /me) are the ones who write the Basisziel and must see
+// what a later PATCH would merge into.
+func BaseGoal(user *model.User) GoalValues {
+	return baseGoalValues(userMacros(user))
+}
+
 // visibleTo hides what the account does not track. Applied at read time, never
 // at write time, so toggling a macro in Settings does not destroy history.
 func (v GoalValues) visibleTo(u MacroUser) GoalValues {
@@ -236,7 +244,7 @@ func SetDayGoal(ctx context.Context, pool *pgxpool.Pool, user *model.User, date 
 	}
 
 	vals := baseGoalValues(mu)
-	for i, p := range in.GoalValues.slots() {
+	for i, p := range in.slots() {
 		if *p != nil {
 			*vals.slots()[i] = *p
 		}
