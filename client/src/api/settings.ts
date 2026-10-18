@@ -81,13 +81,16 @@ export function cancelEmailChange() {
 // Content-Type for string bodies, so the multipart boundary stays intact).
 /** One row the server could not read, and why. `reason` is a stable code. */
 export interface ImportSkippedRow {
-  /** `entry` or `weight` — the two arrays are indexed separately. */
+  /** `entry`, `weight` or `adjustment` — the arrays are indexed separately. */
   kind: string;
   /** Position in that array in the uploaded file. */
   index: number;
   /** The row's date when it had a readable one; absent when the date is why it failed. */
   date?: string;
-  /** `not_an_object` | `invalid_date` | `invalid_amount` | `invalid_weight` | `row_limit` */
+  /**
+   * `not_an_object` | `invalid_date` | `invalid_amount` (entry) | `invalid_weight` (weight) |
+   * `invalid_value` | `no_values` | `duplicate_date` (adjustment) | `row_limit`
+   */
   reason: string;
 }
 
