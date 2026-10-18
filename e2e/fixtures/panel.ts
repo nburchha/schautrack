@@ -13,6 +13,10 @@ export async function expectNoWarningColors(root: Locator) {
   const painted = await root.evaluate((el, warning) => {
     const found: string[] = [];
     for (const node of [el, ...Array.from(el.querySelectorAll('*'))]) {
+      // Theme colours can compute to oklch(), so also reject status class names.
+      if (/destructive|danger|warning|\bred-|\bamber-|macro-stat--/.test(node.getAttribute('class') ?? '')) {
+        found.push(`${node.tagName}.class=${node.getAttribute('class')}`);
+      }
       const style = getComputedStyle(node);
       for (const prop of ['color', 'backgroundColor', 'borderTopColor', 'boxShadow'] as const) {
         if (warning.some((w) => style[prop].includes(w))) found.push(`${node.tagName}.${prop}=${style[prop]}`);
