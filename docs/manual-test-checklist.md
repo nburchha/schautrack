@@ -53,6 +53,21 @@ Items marked [A] are covered by automated E2E tests (`npm run test:e2e`).
 - [x] [A] Macro columns visible in entry list when enabled
 - [x] [A] Verify macro status colors (green/yellow/red) match target vs limit modes
 
+## Goal Adjustment (Tagesziel)
+
+- [x] [A] Click the pencil on the Today panel, verify the sheet opens with calories and each enabled macro prefilled from the day's goal (sugar only if enabled), reason empty
+- [x] [A] Save is disabled until a field or the reason changes; Reset is hidden on a day that is not adjusted
+- [x] [A] Change calories and carbs, enter a reason, save: panel shows the new goal, the "adjusted: <reason>" chip and "Base N"
+- [x] [A] Reopen on the adjusted day: fields show the adjusted values and reason, Reset to base goal is offered; unchanged macros kept their value
+- [x] [A] On another day, recent adjustments appear as quick picks (reason and values); a pick only prefills the fields, nothing is saved until Save, fields stay editable
+- [x] [A] Reset to base goal: chip disappears and the Basisziel applies again; other days' adjustments stay
+- [x] [A] Auto-calc account: calories field is read-only, follows the macro fields (4P+4C+9F), and the derived value is saved
+- [ ] Mobile width: the sheet is a bottom sheet, the calorie field shows the numeric keypad (`inputmode="tel"`), macro fields the numeric keypad
+- [ ] Server rejects an invalid value (e.g. calories 0 or above 9999): error shown in the sheet, sheet stays open, nothing saved
+- [ ] Adjustment made on one device appears on a second open tab without reload (SSE)
+- [ ] Viewing a linked account: no pencil on the Today panel, goal cannot be edited
+- [ ] Past and future dates can be adjusted; the date picker shows each day's own goal
+
 ## Weight Tracking
 
 - [x] [A] Add a weight entry via the weight row
