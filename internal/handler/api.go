@@ -126,6 +126,7 @@ func Me(pool *pgxpool.Pool, adminEmail string, settingsCache *database.SettingsC
 			},
 			"isAdmin":             middleware.IsAdmin(user, adminEmail),
 			"pendingLinkRequests": pendingLinkRequests,
+			"barcodeEnabled":      barcodeEnabled(r.Context(), settingsCache),
 		})
 	}
 }

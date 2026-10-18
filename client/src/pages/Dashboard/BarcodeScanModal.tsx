@@ -1,38 +1,59 @@
-import { useState, useRef, useCallback, useEffect, useMemo } from 'react';
+import { useState, useRef, useCallback, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
 import * as Dialog from '@radix-ui/react-dialog';
 import Quagga from '@ericblade/quagga2';
 import { lookupBarcode } from '@/api/barcode';
-import { MACRO_LABELS } from '@/lib/macros';
+import { useAuth } from '@/hooks/useAuth';
+import { MACRO_LABELS, getEnabledMacros } from '@/lib/macros';
+import { MACRO_FIELD, MAX_GRAMS, MIN_GRAMS, parseGrams } from '@/lib/components';
+import { formatNumber } from '@/lib/format';
 import { Button } from '@/components/ui/Button';
 import { cn } from '@/lib/utils';
+import type { Food } from '@/types';
 
 interface Props {
   isOpen: boolean;
   onClose: () => void;
-  onResult: (result: { calories: number; name: string; macros?: Record<string, number> }) => void;
-  enabledMacros: string[];
+  /**
+   * Called with the scanned product, now a catalog food, and the grams to use.
+   * The scan makes a component, never a whole meal. A rejection keeps the
+   * product on screen; the caller reports the failure.
+   */
+  onPick: (food: Food, grams: number) => Promise<void> | void;
+  /** Label of the confirm button, e.g. "Add". */
+  pickLabel: string;
 }
 
 type Phase = 'scanning' | 'loading' | 'result' | 'error';
 type Mode = 'camera' | 'upload' | 'manual';
 
 interface ProductData {
-  name?: string;
-  caloriesPer100g: number;
-  macrosPer100g: Record<string, number>;
+  food: Food;
   servingSize?: string | null;
   servingQuantity?: number | null;
 }
 
-export default function BarcodeScanModal({ isOpen, onClose, onResult, enabledMacros }: Props) {
+function scalePortion(food: Food, grams: number, macroKeys: string[]) {
+  const factor = grams / 100;
+  const macros: Record<string, number | null> = {};
+  for (const key of macroKeys) {
+    const per100 = food.macros_per_100g[MACRO_FIELD[key as keyof typeof MACRO_FIELD]];
+    macros[key] = per100 == null ? null : Math.round(per100 * factor * 10) / 10;
+  }
+  return { calories: Math.round((food.calories_per_100g ?? 0) * factor), macros };
+}
+
+export default function BarcodeScanModal({ isOpen, onClose, onPick, pickLabel }: Props) {
   const { t } = useTranslation('dashboard');
+  const { user } = useAuth();
+  const enabledMacros = getEnabledMacros(user?.macrosEnabled ?? {});
   const [phase, setPhase] = useState<Phase>('scanning');
   const [mode, setMode] = useState<Mode>('camera');
   const [barcode, setBarcode] = useState('');
   const [manualCode, setManualCode] = useState('');
   const [product, setProduct] = useState<ProductData | null>(null);
   const [grams, setGrams] = useState('100');
+  const [picking, setPicking] = useState(false);
   const [errorMsg, setErrorMsg] = useState('');
   const [cameraAvailable, setCameraAvailable] = useState(true);
   const [scannerReady, setScannerReady] = useState(false);
@@ -73,16 +94,15 @@ export default function BarcodeScanModal({ isOpen, onClose, onResult, enabledMac
         setPhase('error');
         return;
       }
-      if (res.caloriesPer100g == null) {
+      // Without calories the product is not stored, so there is no food to pick.
+      if (res.caloriesPer100g == null || !res.food) {
         setErrorMsg(res.note || t('barcodeScan.errorNoCalorieData'));
         setProduct(null);
         setPhase('error');
         return;
       }
       const p: ProductData = {
-        name: res.name,
-        caloriesPer100g: res.caloriesPer100g,
-        macrosPer100g: res.macrosPer100g || {},
+        food: res.food,
         servingSize: res.servingSize,
         servingQuantity: res.servingQuantity,
       };
@@ -218,25 +238,22 @@ export default function BarcodeScanModal({ isOpen, onClose, onResult, enabledMac
     setErrorMsg('');
   };
 
-  const scaled = useMemo(() => {
-    if (!product) return null;
-    const g = parseFloat(grams) || 0;
-    const factor = g / 100;
-    const calories = Math.round(product.caloriesPer100g * factor);
-    const macros: Record<string, number> = {};
-    for (const [key, val] of Object.entries(product.macrosPer100g)) {
-      macros[key] = Math.round(val * factor);
-    }
-    return { calories, macros };
-  }, [product, grams]);
+  const parsedGrams = parseGrams(grams);
 
-  const handleAddEntry = () => {
-    if (!scaled || !product) return;
-    onResult({
-      calories: scaled.calories,
-      name: product.name || '',
-      macros: scaled.macros,
-    });
+  // Unknown values stay unknown (null): a product without a fiber figure shows
+  // a dash, not "0 g".
+  const scaled = product && parsedGrams != null ? scalePortion(product.food, parsedGrams, enabledMacros) : null;
+
+  const handlePick = async () => {
+    if (!product || parsedGrams == null || picking) return;
+    setPicking(true);
+    try {
+      await onPick(product.food, parsedGrams);
+    } catch {
+      // The caller reports the failure; stay on the product so a retry is one tap.
+    } finally {
+      setPicking(false);
+    }
   };
 
   const handleRetry = () => {
@@ -366,14 +383,12 @@ export default function BarcodeScanModal({ isOpen, onClose, onResult, enabledMac
             )}
 
             {/* Result phase */}
-            {phase === 'result' && product && scaled && (
+            {phase === 'result' && product && (
               <>
                 <div className="flex flex-col items-center gap-1 py-2">
-                  {product.name && (
-                    <div className="text-base font-semibold text-foreground text-center">{product.name}</div>
-                  )}
+                  <div className="text-base font-semibold text-foreground text-center" data-testid="barcode-product-name">{product.food.name}</div>
                   <div className="text-xs text-muted-foreground">
-                    {t('barcodeScan.calPer100g', { value: product.caloriesPer100g })}
+                    {t('barcodeScan.calPer100g', { value: formatNumber(Math.round(product.food.calories_per_100g ?? 0)) })}
                     {product.servingSize && t('barcodeScan.servingSizeSuffix', { size: product.servingSize })}
                   </div>
                 </div>
@@ -383,10 +398,21 @@ export default function BarcodeScanModal({ isOpen, onClose, onResult, enabledMac
                   <div className="relative flex-1">
                     <input
                       type="text"
-                      inputMode="numeric"
-                      className="w-full rounded-md border border-input bg-muted/50 px-3 py-2 pr-8 text-sm text-foreground outline-none transition-colors focus:border-ring focus:ring-1 focus:ring-ring"
+                      inputMode="decimal"
+                      aria-label={t('foodSearch.gramsLabel', { name: product.food.name })}
+                      className={cn(
+                        'w-full rounded-md border border-input bg-muted/50 px-3 py-2 pr-8 text-sm text-foreground outline-none transition-colors focus:border-ring focus:ring-1 focus:ring-ring tabular-nums',
+                        parsedGrams == null && 'border-destructive'
+                      )}
                       value={grams}
                       onChange={(e) => setGrams(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter') {
+                          e.preventDefault();
+                          void handlePick();
+                        }
+                      }}
+                      data-testid="barcode-grams"
                     />
                     <span className="absolute right-2.5 top-1/2 -translate-y-1/2 text-[10px] text-muted-foreground pointer-events-none">g</span>
                   </div>
@@ -394,7 +420,7 @@ export default function BarcodeScanModal({ isOpen, onClose, onResult, enabledMac
                     {product.servingQuantity && product.servingQuantity !== 100 && (
                       <button
                         type="button"
-                        className={`rounded-md px-2.5 py-2 text-xs font-medium transition-colors cursor-pointer border ${parseFloat(grams) === product.servingQuantity ? 'border-primary bg-primary/10 text-primary' : 'border-border bg-transparent text-muted-foreground hover:text-foreground hover:border-primary/50'}`}
+                        className={`rounded-md px-2.5 py-2 text-xs font-medium transition-colors cursor-pointer border ${parsedGrams === product.servingQuantity ? 'border-primary bg-primary/10 text-primary' : 'border-border bg-transparent text-muted-foreground hover:text-foreground hover:border-primary/50'}`}
                         onClick={() => handleServingPreset(product.servingQuantity ?? 0)}
                       >
                         {product.servingSize || `${product.servingQuantity}g`}
@@ -402,37 +428,39 @@ export default function BarcodeScanModal({ isOpen, onClose, onResult, enabledMac
                     )}
                     <button
                       type="button"
-                      className={`rounded-md px-2.5 py-2 text-xs font-medium transition-colors cursor-pointer border ${parseFloat(grams) === 100 ? 'border-primary bg-primary/10 text-primary' : 'border-border bg-transparent text-muted-foreground hover:text-foreground hover:border-primary/50'}`}
+                      className={`rounded-md px-2.5 py-2 text-xs font-medium transition-colors cursor-pointer border ${parsedGrams === 100 ? 'border-primary bg-primary/10 text-primary' : 'border-border bg-transparent text-muted-foreground hover:text-foreground hover:border-primary/50'}`}
                       onClick={() => handleServingPreset(100)}
                     >
                       100g
                     </button>
                   </div>
                 </div>
+                {parsedGrams == null && (
+                  <p className="m-0 text-center text-xs text-destructive" role="alert">
+                    {t('foodSearch.invalidGrams', { min: MIN_GRAMS, max: formatNumber(MAX_GRAMS) })}
+                  </p>
+                )}
 
-                {/* Computed values */}
+                {/* Computed values. OFF is crowdsourced, so a missing figure shows as a dash. */}
                 <div className="flex flex-col items-center gap-1">
-                  <div className="text-2xl font-bold text-primary tabular-nums">{scaled.calories} cal</div>
-                  {Object.keys(scaled.macros).length > 0 && (
-                    <div className="flex gap-4 mt-1">
-                      {enabledMacros.map((key) => {
-                        const val = scaled.macros[key];
-                        if (val == null) return null;
-                        const label = MACRO_LABELS[key as keyof typeof MACRO_LABELS];
-                        return (
-                          <div key={key} className="flex flex-col items-center">
-                            <span className="text-sm font-semibold tabular-nums">{val}g</span>
-                            <span className="text-xs uppercase tracking-wider text-muted-foreground">{label?.label || key}</span>
-                          </div>
-                        );
-                      })}
-                    </div>
-                  )}
+                  <div className="text-2xl font-bold text-primary tabular-nums" data-testid="barcode-kcal">{scaled ? scaled.calories : '–'} cal</div>
+                  <div className="flex gap-4 mt-1">
+                    {enabledMacros.map((key) => {
+                      const val = scaled?.macros[key];
+                      const label = MACRO_LABELS[key as keyof typeof MACRO_LABELS];
+                      return (
+                        <div key={key} className="flex flex-col items-center">
+                          <span className="text-sm font-semibold tabular-nums">{val == null ? '–' : `${val}g`}</span>
+                          <span className="text-xs uppercase tracking-wider text-muted-foreground">{label?.label || key}</span>
+                        </div>
+                      );
+                    })}
+                  </div>
                 </div>
 
                 <div className="flex gap-2 justify-center">
-                  <Button size="sm" onClick={handleAddEntry}>{t('barcodeScan.addEntryButton')}</Button>
-                  <Button size="sm" variant="ghost" onClick={handleRetry}>{t('barcodeScan.scanAnotherButton')}</Button>
+                  <Button size="sm" onClick={() => void handlePick()} disabled={parsedGrams == null} loading={picking} data-testid="barcode-pick">{pickLabel}</Button>
+                  <Button size="sm" variant="ghost" onClick={handleRetry} disabled={picking}>{t('barcodeScan.scanAnotherButton')}</Button>
                 </div>
               </>
             )}

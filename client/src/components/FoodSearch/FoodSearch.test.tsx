@@ -8,15 +8,25 @@ import { FoodSearch } from './FoodSearch';
 vi.mock('@/api/foods', () => ({ searchFoods: vi.fn() }));
 import { searchFoods } from '@/api/foods';
 
+// The scanner itself is covered by BarcodeScanModal.test; here it only has to
+// be wired to the same onPick as a search hit. Like the real one, it swallows
+// a rejection (the caller reports it) and stays open.
+vi.mock('@/pages/Dashboard/BarcodeScanModal', () => ({
+  default: ({ isOpen, onPick, pickLabel }: { isOpen: boolean; onPick: (f: Food, g: number) => Promise<void> | void; pickLabel: string }) =>
+    isOpen ? <button type="button" data-testid="mock-scanner" onClick={() => void Promise.resolve(onPick(scanned, 60)).catch(() => {})}>{pickLabel}</button> : null,
+}));
+
 const macros = { protein_g: 13.5, carbs_g: 58, fat_g: 7, fiber_g: 10, sugar_g: 1 };
 const oats: Food = { id: 1, source: 'bls', source_code: 'C1', name: 'Hafer Flocken', source_classification: 'C', calories_per_100g: 372, macros_per_100g: macros };
 const noKcal: Food = { id: 2, source: 'off', source_code: '4001', name: 'Mystery Bar', source_classification: null, calories_per_100g: null, macros_per_100g: macros };
 
-function renderSearch(onPick = vi.fn().mockResolvedValue(undefined)) {
+const scanned: Food = { id: 3, source: 'off', source_code: '4311501062449', name: 'Skyr', source_classification: null, calories_per_100g: 63, macros_per_100g: macros };
+
+function renderSearch(onPick = vi.fn().mockResolvedValue(undefined), barcode = false) {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   render(
     <QueryClientProvider client={client}>
-      <FoodSearch onPick={onPick} pickLabel="Add" />
+      <FoodSearch onPick={onPick} pickLabel="Add" barcode={barcode} />
     </QueryClientProvider>,
   );
   return onPick;
@@ -148,5 +158,29 @@ describe('FoodSearch', () => {
 
     await waitFor(() => expect(onPick).toHaveBeenCalled());
     expect(screen.getByTestId('food-search-selected')).toBeInTheDocument();
+  });
+
+  it('offers the scanner only when barcode lookup is on', () => {
+    renderSearch();
+    expect(screen.queryByTestId('food-search-scan')).not.toBeInTheDocument();
+  });
+
+  it('picks a scanned product like a search hit, and closes the scanner once it is added', async () => {
+    const onPick = renderSearch(undefined, true);
+    await userEvent.click(screen.getByTestId('food-search-scan'));
+    await userEvent.click(await screen.findByTestId('mock-scanner'));
+
+    expect(onPick).toHaveBeenCalledWith(scanned, 60);
+    await waitFor(() => expect(screen.queryByTestId('mock-scanner')).not.toBeInTheDocument());
+  });
+
+  it('keeps the scanner open when the pick fails', async () => {
+    const failing = vi.fn().mockRejectedValue(new Error('boom'));
+    renderSearch(failing, true);
+    await userEvent.click(screen.getByTestId('food-search-scan'));
+    await userEvent.click(await screen.findByTestId('mock-scanner'));
+
+    await waitFor(() => expect(failing).toHaveBeenCalled());
+    expect(screen.getByTestId('mock-scanner')).toBeInTheDocument();
   });
 });

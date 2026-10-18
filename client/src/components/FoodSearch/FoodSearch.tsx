@@ -1,30 +1,24 @@
-import { useEffect, useState } from 'react';
+import { Suspense, useEffect, useRef, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
 import { searchFoods } from '@/api/foods';
 import type { Food } from '@/types';
-import { formatAmount } from '@/lib/components';
+import { MAX_GRAMS, MIN_GRAMS, formatAmount, parseGrams } from '@/lib/components';
 import { formatNumber } from '@/lib/format';
-import { parseAmount } from '@/lib/mathParser';
 import { Button } from '@/components/ui/Button';
 import { cn } from '@/lib/utils';
+import { lazyRoute } from '@/lib/lazyRoute';
+
+// Lazy-loaded: the scanner pulls in the quagga2 barcode decoder, which is only
+// fetched when someone first opens it.
+const BarcodeScanModal = lazyRoute(() => import('@/pages/Dashboard/BarcodeScanModal'));
 
 const MIN_QUERY = 2;
 const DEBOUNCE_MS = 250;
 const DEFAULT_GRAMS = '100';
-const MIN_GRAMS = 0.01;
-const MAX_GRAMS = 10000;
 
 const inputClass =
   'h-10 w-full rounded-md border border-input bg-muted/50 px-3 py-2 text-sm text-foreground outline-none transition-colors focus:border-ring focus:ring-1 focus:ring-ring placeholder:text-muted-foreground/50';
-
-/** "2*45" and "12,5" both work; the server stores hundredths of a gram. */
-function parseGrams(raw: string): number | null {
-  const parsed = parseAmount(raw.replace(/,/g, '.'), { maxAbs: MAX_GRAMS });
-  if (!parsed.ok) return null;
-  const grams = Math.round(parsed.value * 100) / 100;
-  return grams >= MIN_GRAMS && grams <= MAX_GRAMS ? grams : null;
-}
 
 interface Props {
   /** Called with the chosen food and grams. The search resets once it resolves; a rejection keeps the selection. */
@@ -32,6 +26,8 @@ interface Props {
   /** Label of the confirm button, e.g. "Add". */
   pickLabel: string;
   autoFocus?: boolean;
+  /** Show a barcode scanner next to the search. A scanned product is picked like a search hit. */
+  barcode?: boolean;
 }
 
 /**
@@ -39,13 +35,18 @@ interface Props {
  * the previous ones stay on screen until the next ones arrive, so the list
  * never flashes empty between keystrokes.
  */
-export function FoodSearch({ onPick, pickLabel, autoFocus }: Props) {
+export function FoodSearch({ onPick, pickLabel, autoFocus, barcode }: Props) {
   const { t } = useTranslation('dashboard');
   const [input, setInput] = useState('');
   const [term, setTerm] = useState('');
   const [selected, setSelected] = useState<Food | null>(null);
   const [grams, setGrams] = useState(DEFAULT_GRAMS);
   const [picking, setPicking] = useState(false);
+  const [scanOpen, setScanOpen] = useState(false);
+  // Once opened the scanner stays mounted so its close-cleanup keeps running;
+  // it is not mounted, and its chunk not fetched, before the first open.
+  const scanMounted = useRef(false);
+  if (scanOpen) scanMounted.current = true;
 
   useEffect(() => {
     const trimmed = input.trim();
@@ -147,20 +148,37 @@ export function FoodSearch({ onPick, pickLabel, autoFocus }: Props) {
 
   return (
     <div className="flex flex-col gap-2">
-      <input
-        className={inputClass}
-        type="search"
-        enterKeyHint="search"
-        autoComplete="off"
-        autoCorrect="off"
-        spellCheck={false}
-        aria-label={t('foodSearch.ariaLabel')}
-        placeholder={t('foodSearch.placeholder')}
-        value={input}
-        onChange={(e) => setInput(e.target.value)}
-        autoFocus={autoFocus}
-        data-testid="food-search-input"
-      />
+      <div className="flex items-center gap-2">
+        <input
+          className={inputClass}
+          type="search"
+          enterKeyHint="search"
+          autoComplete="off"
+          autoCorrect="off"
+          spellCheck={false}
+          aria-label={t('foodSearch.ariaLabel')}
+          placeholder={t('foodSearch.placeholder')}
+          value={input}
+          onChange={(e) => setInput(e.target.value)}
+          autoFocus={autoFocus}
+          data-testid="food-search-input"
+        />
+        {barcode && (
+          <button
+            type="button"
+            className="flex size-10 shrink-0 cursor-pointer items-center justify-center rounded-md border border-input bg-muted/50 text-muted-foreground transition-colors hover:text-foreground"
+            onClick={() => setScanOpen(true)}
+            aria-label={t('entries.scanBarcodeLabel')}
+            title={t('entries.scanBarcodeLabel')}
+            data-testid="food-search-scan"
+          >
+            <svg aria-hidden="true" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M3 5v-2h4" /><path d="M17 3h4v2" /><path d="M21 19v2h-4" /><path d="M7 21h-4v-2" />
+              <path d="M7 8v8" /><path d="M12 8v8" /><path d="M17 8v8" /><path d="M5 8v8" /><path d="M15 8v8" /><path d="M19 8v8" />
+            </svg>
+          </button>
+        )}
+      </div>
 
       {!active && (
         <p className="m-0 px-1 text-xs text-muted-foreground" data-testid="food-search-hint">{t('foodSearch.hint', { min: MIN_QUERY })}</p>
@@ -212,6 +230,21 @@ export function FoodSearch({ onPick, pickLabel, autoFocus }: Props) {
             );
           })}
         </ul>
+      )}
+
+      {scanMounted.current && (
+        <Suspense fallback={null}>
+          <BarcodeScanModal
+            isOpen={scanOpen}
+            onClose={() => setScanOpen(false)}
+            onPick={async (food, grams) => {
+              // A rejection leaves the scanner open on the product, so a retry is one tap.
+              await onPick(food, grams);
+              setScanOpen(false);
+            }}
+            pickLabel={pickLabel}
+          />
+        </Suspense>
       )}
     </div>
   );

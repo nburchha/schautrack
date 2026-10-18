@@ -3,15 +3,15 @@ import { login } from './fixtures/auth';
 import { openAddFood } from './fixtures/helpers';
 
 test.describe('Barcode Lookup', () => {
-  test('manual barcode lookup populates entry form', async ({ page }) => {
+  test('a scanned product becomes a component of the meal being built', async ({ page }) => {
     await login(page);
     await openAddFood(page);
 
-    // Click the barcode button
-    await page.locator('button[title="Scan barcode"]').click();
+    // The scanner sits beside the food search: a scan adds a component.
+    await page.getByTestId('food-search-scan').click();
 
     // Modal should open. Scoped to the scanner layer: the add-food sheet that
-    // holds the barcode button is a dialog too.
+    // holds the scan button is a dialog too.
     const modal = page.locator('[data-modal-layer="scanner"]');
     await expect(modal).toBeVisible();
 
@@ -23,13 +23,15 @@ test.describe('Barcode Lookup', () => {
     await modal.getByRole('button', { name: 'Look up' }).click();
 
     // Wait for result (external API call)
-    await expect(modal.locator('.text-2xl')).toBeVisible({ timeout: 15000 });
+    await expect(modal.getByTestId('barcode-kcal')).toBeVisible({ timeout: 15000 });
 
-    // Add entry
-    await modal.getByRole('button', { name: 'Add Entry' }).click();
+    // Choose the amount and add it
+    await modal.getByTestId('barcode-grams').fill('40');
+    await modal.getByTestId('barcode-pick').click();
 
-    // Modal closes, form populated
+    // Modal closes; the product is a draft component with those grams.
     await expect(modal).not.toBeVisible();
-    await expect(page.locator('input[placeholder="Breakfast, snack..."]')).not.toHaveValue('');
+    await expect(page.getByTestId('draft-component')).toHaveCount(1);
+    await expect(page.getByTestId('draft-component-grams')).toHaveValue('40');
   });
 });

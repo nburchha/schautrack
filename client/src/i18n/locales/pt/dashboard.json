@@ -27,7 +27,6 @@
     "lookingUpText": "A procurar {{barcode}}...",
     "calPer100g": "{{value}} cal por 100g",
     "servingSizeSuffix": " · dose: {{size}}",
-    "addEntryButton": "Adicionar Registo",
     "scanAnotherButton": "Ler Outro",
     "attributionPrefix": "Os dados do código de barras são enviados para e fornecidos por",
     "attributionLinkText": "Open Food Facts",

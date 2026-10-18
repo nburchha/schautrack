@@ -722,7 +722,7 @@ GET /api/v1/barcode/{code}
 
 **Scope:** `foods:read`
 
-Resolves an EAN-8, UPC-A, or EAN-13 barcode via OpenFoodFacts. Rate limited per account at the same rate as the app's own scanner, since it queries the same third-party database. Returns 404 when barcode lookup is disabled on the server.
+Resolves an EAN-8, UPC-A, or EAN-13 barcode via OpenFoodFacts. A barcode names one product. When it has a calorie value it is stored in the catalog (`source: off`, `source_code`: the EAN; a rescan refreshes the values) and returned as `food`, ready to use as an entry component. This is a cache of public data, which is why the endpoint stays on `foods:read`. Rate limited per account at the same rate as the app's own scanner, since it queries the same third-party database. Returns 404 when barcode lookup is disabled on the server.
 
 | Parameter | In | Required | Description |
 | --- | --- | --- | --- |
@@ -1122,7 +1122,7 @@ Returns this OpenAPI description. Needs no token.
 
 ### BarcodeProduct
 
-The product as resolved from OpenFoodFacts, or a not-found result.
+The product as resolved from OpenFoodFacts. A product with calories is also stored in the catalog and returned as `food` (a Food), whose `id` can be used as the `food_id` of an entry component. `food` is absent when the product has no usable calorie value.
 
 Free-form object; see `GET /api/v1/openapi.json` for the served shape.
 

@@ -201,4 +201,12 @@ describe('EntryForm time field', () => {
     await waitFor(() => expect(createEntry).toHaveBeenCalled());
     expect(vi.mocked(createEntry).mock.calls[0][0].eaten_at).toMatch(new RegExp(`^${today}T07:30:00[+-]\\d\\d:\\d\\d$`));
   });
+
+  it('puts the barcode scanner next to the food search, since a scan makes a component', () => {
+    renderForm();
+    const search = screen.getByTestId('entry-form-search');
+    expect(within(search).getByTestId('food-search-scan')).toBeInTheDocument();
+    // One scanner, not a second one beside the photo and quick-add buttons.
+    expect(screen.getAllByLabelText('Scan barcode')).toHaveLength(1);
+  });
 });

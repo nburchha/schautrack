@@ -83,5 +83,5 @@ export function getCaptcha() {
 }
 
 export function getMe() {
-  return api<{ user: import('@/types').User; isAdmin: boolean; pendingLinkRequests: number }>('/api/me');
+  return api<{ user: import('@/types').User; isAdmin: boolean; pendingLinkRequests: number; barcodeEnabled?: boolean }>('/api/me');
 }

@@ -368,7 +368,7 @@ func main() {
 	// v1 route answer 404 instead of 500.
 	var v1Barcode http.HandlerFunc
 	if cfg.EnableBarcode {
-		v1Barcode = handler.Barcode(cfg)
+		v1Barcode = handler.Barcode(cfg, pool)
 	}
 	v1Handler := &handler.V1Handler{
 		Pool:         pool,
@@ -392,7 +392,7 @@ func main() {
 
 	// Barcode
 	if cfg.EnableBarcode {
-		r.With(middleware.RequireLogin, barcodeLimiter.Middleware).Get("/api/barcode/{code}", handler.Barcode(cfg))
+		r.With(middleware.RequireLogin, barcodeLimiter.Middleware).Get("/api/barcode/{code}", handler.Barcode(cfg, pool))
 	}
 
 	// Admin routes

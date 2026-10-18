@@ -1,4 +1,5 @@
 import { api } from './client';
+import type { Food } from '@/types';
 
 export interface BarcodeResult {
   ok: boolean;
@@ -7,6 +8,8 @@ export interface BarcodeResult {
   macrosPer100g?: Record<string, number>;
   servingSize?: string | null;
   servingQuantity?: number | null;
+  /** The product as a catalog food. Present when it has calories. */
+  food?: Food;
   note?: string;
   error?: string;
 }

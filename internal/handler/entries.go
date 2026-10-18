@@ -51,7 +51,12 @@ func (h *EntriesHandler) getAIProviderName(r *http.Request, user *model.User) *s
 }
 
 func (h *EntriesHandler) isBarcodeEnabled(ctx context.Context) bool {
-	result := h.Settings.GetEffectiveSetting(ctx, "enable_barcode", os.Getenv("ENABLE_BARCODE"))
+	return barcodeEnabled(ctx, h.Settings)
+}
+
+// barcodeEnabled is the effective enable_barcode setting: on unless switched off.
+func barcodeEnabled(ctx context.Context, settings *database.SettingsCache) bool {
+	result := settings.GetEffectiveSetting(ctx, "enable_barcode", os.Getenv("ENABLE_BARCODE"))
 	if result.Value == nil {
 		return true // default enabled
 	}

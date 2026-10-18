@@ -4,6 +4,7 @@ import { useTranslation } from 'react-i18next';
 import { addComponent } from '@/api/entries';
 import { FoodSearch } from '@/components/FoodSearch/FoodSearch';
 import { useToastStore } from '@/stores/toastStore';
+import { useAuthStore } from '@/stores/authStore';
 import type { Food } from '@/types';
 
 // Search the catalog, pick a food, enter grams: the food becomes a component of
@@ -15,6 +16,7 @@ export default function AddComponent() {
   const queryClient = useQueryClient();
   const addToast = useToastStore((s) => s.addToast);
   const entryId = Number(id);
+  const barcodeEnabled = useAuthStore((s) => s.barcodeEnabled);
 
   const add = async (food: Food, grams: number) => {
     try {
@@ -47,7 +49,7 @@ export default function AddComponent() {
         <h1 className="m-0 font-display text-2xl font-bold text-foreground">{t('meal.addPage.title')}</h1>
       </header>
       <section className="surface p-4" data-testid="add-component">
-        <FoodSearch onPick={add} pickLabel={t('meal.addPage.add')} autoFocus />
+        <FoodSearch onPick={add} pickLabel={t('meal.addPage.add')} autoFocus barcode={barcodeEnabled} />
       </section>
     </div>
   );

@@ -17,7 +17,6 @@
     "startingCamera": "Starting camera..."
   },
   "barcodeScan": {
-    "addEntryButton": "Add Entry",
     "attributionLinkText": "Open Food Facts",
     "attributionPrefix": "Barcode data is sent to and provided by",
     "calPer100g": "{{value}} cal per 100g",
