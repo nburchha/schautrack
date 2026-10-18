@@ -27,7 +27,6 @@ func seedBasisziel(t *testing.T, e *v1Env, goals, enabled string) {
 const allMacrosOn = `{"calories":true,"protein":true,"carbs":true,"fat":true,"fiber":true,"sugar":true}`
 const baseGoals = `{"calories":2400,"protein":150,"carbs":300,"fat":70,"fiber":30,"sugar":50}`
 
-
 func requireGoalInt(t *testing.T, field string, got *int, want int) {
 	t.Helper()
 	if got == nil || *got != want {
