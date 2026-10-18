@@ -6,10 +6,12 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
+	"math"
 	"net/http"
 	"strconv"
 	"strings"
 	"time"
+	"unicode/utf8"
 
 	"github.com/jackc/pgx/v5"
 
@@ -61,6 +63,15 @@ func (h *EntriesHandler) Export(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	defer weights.Close()
+
+	adjustments, err := h.Pool.Query(r.Context(),
+		"SELECT goal_date, calories, protein, carbs, fat, fiber, sugar, reason FROM goal_adjustments WHERE user_id = $1 ORDER BY goal_date DESC LIMIT 100000",
+		user.ID)
+	if err != nil {
+		ErrorJSON(w, http.StatusInternalServerError, "Export failed")
+		return
+	}
+	defer adjustments.Close()
 
 	filename := fmt.Sprintf("schautrack-export-%s.json", time.Now().Format("2006-01-02"))
 	w.Header().Set("Content-Type", "application/json")
@@ -130,6 +141,42 @@ func (h *EntriesHandler) Export(w http.ResponseWriter, r *http.Request) {
 	}
 	fmt.Fprint(w, "],\n")
 
+	// Goal adjustments. Unset values and an absent reason are omitted rather
+	// than exported as null, as with body fat above, so the file stays terse and
+	// import reads absent and null the same way.
+	fmt.Fprint(w, `"goal_adjustments":[`)
+	first = true
+	for adjustments.Next() {
+		var date string
+		var g service.GoalValues
+		var reason *string
+		if err := adjustments.Scan(&date, &g.Calories, &g.Protein, &g.Carbs, &g.Fat, &g.Fiber, &g.Sugar, &reason); err != nil {
+			slog.Error("failed to scan goal adjustment row in export", "error", err)
+			continue
+		}
+		if !first {
+			fmt.Fprint(w, ",")
+		}
+		row := map[string]any{"date": date}
+		for _, slot := range goalSlots(&g) {
+			if *slot.dst != nil {
+				row[slot.key] = **slot.dst
+			}
+		}
+		if reason != nil {
+			row["reason"] = *reason
+		}
+		aj, _ := json.Marshal(row)
+		w.Write(aj)
+		first = false
+	}
+	if err := adjustments.Err(); err != nil {
+		// See the weights.Err() comment above: truncate, never close the JSON.
+		slog.Error("export aborted: goal adjustment row iteration failed", "error", err)
+		return
+	}
+	fmt.Fprint(w, "],\n")
+
 	// Entries
 	fmt.Fprint(w, `"entries":[`)
 	first = true
@@ -195,6 +242,16 @@ type importWeight struct {
 	bodyFat *float64
 }
 
+// importAdjustment is a goal adjustment (Tagesziel-Anpassung) that survived
+// import validation. The goal is the stored snapshot, taken verbatim: import
+// never gap-fills from the Basisziel, because the file is a backup of absolute
+// values, not a thin API write.
+type importAdjustment struct {
+	date   string
+	goal   service.GoalValues
+	reason *string
+}
+
 // importData is the fully validated payload extracted from an import file:
 // only rows/settings safe to write survive here. It is produced by
 // parseImportData with no database, request, or user access so the
@@ -202,6 +259,7 @@ type importWeight struct {
 type importData struct {
 	entries         []importEntry
 	weights         []importWeight
+	adjustments     []importAdjustment
 	goalCandidate   *float64
 	hasUserSettings bool
 	// skippedEntries and skippedWeights count the rows that were present in
@@ -210,8 +268,9 @@ type importData struct {
 	// being indistinguishable from a complete one — a row with an amount the
 	// server could not parse used to just vanish, and the response still said
 	// the import succeeded (#351).
-	skippedEntries int
-	skippedWeights int
+	skippedEntries     int
+	skippedWeights     int
+	skippedAdjustments int
 
 	// skipped names the dropped rows: which one, and why. The counts above
 	// say a partial import happened; this says what to fix (#409). With a
@@ -235,7 +294,7 @@ const maxReportedSkips = 50
 // prose so a client can group or translate it; the wire shape is documented on
 // the ImportResult schema.
 type skippedRow struct {
-	// Kind is "entry" or "weight" — the two arrays are indexed separately, so
+	// Kind is "entry", "weight" or "adjustment" — the arrays are indexed separately, so
 	// an index alone would be ambiguous.
 	Kind string `json:"kind"`
 	// Index is the row's position in its array in the uploaded file, so the
@@ -245,8 +304,14 @@ type skippedRow struct {
 	// itself is why the row was dropped.
 	Date string `json:"date,omitempty"`
 	// Reason is one of: not_an_object, invalid_date, invalid_amount,
-	// invalid_weight, row_limit.
+	// invalid_weight, invalid_value (adjustments), no_values (adjustments),
+	// duplicate_date (adjustments), row_limit.
 	Reason string `json:"reason"`
+}
+
+// skippedTotal is every row dropped, across all arrays.
+func (d importData) skippedTotal() int {
+	return d.skippedEntries + d.skippedWeights + d.skippedAdjustments
 }
 
 // record appends a skip, up to the cap. Callers still bump the counters, so
@@ -262,7 +327,7 @@ func (d *importData) record(kind string, index int, date, reason string) {
 // returns 400 — and, critically, performs no destructive DELETE — when this is
 // true, so a garbage or all-invalid file can never wipe the user's data.
 func (d importData) isEmpty() bool {
-	return len(d.entries) == 0 && len(d.weights) == 0 && !d.hasUserSettings
+	return len(d.entries) == 0 && len(d.weights) == 0 && len(d.adjustments) == 0 && !d.hasUserSettings
 }
 
 // parseImportData validates and extracts the importable payload from an
@@ -409,6 +474,8 @@ func parseImportData(parsed map[string]any) importData {
 		}
 	}
 
+	adjustments, skippedAdjustments := parseImportAdjustments(parsed["goal_adjustments"], &rec)
+
 	// Check user settings
 	hasUserSettings := false
 	if userObj, ok := parsed["user"].(map[string]any); ok {
@@ -418,14 +485,121 @@ func parseImportData(parsed map[string]any) importData {
 	}
 
 	return importData{
-		entries:         toInsert,
-		weights:         weightToInsert,
-		goalCandidate:   goalCandidate,
-		hasUserSettings: hasUserSettings,
-		skippedEntries:  skippedEntries,
-		skippedWeights:  skippedWeights,
-		skipped:         rec.skipped,
+		entries:            toInsert,
+		weights:            weightToInsert,
+		adjustments:        adjustments,
+		goalCandidate:      goalCandidate,
+		hasUserSettings:    hasUserSettings,
+		skippedEntries:     skippedEntries,
+		skippedWeights:     skippedWeights,
+		skippedAdjustments: skippedAdjustments,
+		skipped:            rec.skipped,
 	}
+}
+
+// goalSlot pairs a goal field's JSON key with its destination, in the order the
+// export writes them. Local to the handler: service.GoalValues keeps its own
+// slot list private, and a second copy here is cheaper than widening it.
+type goalSlot struct {
+	key string
+	dst **int
+}
+
+func goalSlots(g *service.GoalValues) []goalSlot {
+	return []goalSlot{
+		{"calories", &g.Calories}, {"protein", &g.Protein}, {"carbs", &g.Carbs},
+		{"fat", &g.Fat}, {"fiber", &g.Fiber}, {"sugar", &g.Sugar},
+	}
+}
+
+// parseImportAdjustments validates the "goal_adjustments" array. A missing key
+// or a non-array value yields nothing, so files from before the feature import
+// as before. Rows are kept in file order; a repeated date keeps its first row
+// (a snapshot is per date, and silently letting a later row win would make the
+// outcome depend on array order).
+//
+// Values are numbers or null/absent. Calories are 1..MaxGoalCalories, macros
+// 0..MaxGoalMacro with 0 meaning "no goal" exactly as in the Basisziel, and the
+// reason is at most MaxGoalReasonLen runes — the same bounds a write through
+// the API enforces. Any violation drops the whole row: a half-read snapshot
+// would be a goal nobody set.
+func parseImportAdjustments(raw any, rec *importData) (kept []importAdjustment, skipped int) {
+	rows, ok := raw.([]any)
+	if !ok {
+		return nil, 0
+	}
+	seen := map[string]bool{}
+	for i, r := range rows {
+		if len(kept) >= 10000 {
+			skipped += len(rows) - i
+			rec.record("adjustment", i, "", "row_limit")
+			break
+		}
+		row, ok := r.(map[string]any)
+		if !ok {
+			skipped++
+			rec.record("adjustment", i, "", "not_an_object")
+			continue
+		}
+		date, _ := row["date"].(string)
+		if !isValidDate(date) {
+			skipped++
+			rec.record("adjustment", i, "", "invalid_date")
+			continue
+		}
+		var adj importAdjustment
+		adj.date = date
+		valid := true
+		for _, slot := range goalSlots(&adj.goal) {
+			key, p := slot.key, slot.dst
+			v, present := row[key]
+			if !present || v == nil {
+				continue
+			}
+			f, isNum := v.(float64)
+			lo, hi := 0, service.MaxGoalMacro
+			if key == "calories" {
+				lo, hi = 1, service.MaxGoalCalories
+			}
+			if !isNum || f != math.Trunc(f) || f < float64(lo) || f > float64(hi) {
+				valid = false
+				break
+			}
+			if n := int(f); n > 0 {
+				*p = &n
+			}
+		}
+		if valid {
+			if v, present := row["reason"]; present && v != nil {
+				s, isStr := v.(string)
+				s = strings.TrimSpace(s)
+				switch {
+				case !isStr || utf8.RuneCountInString(s) > service.MaxGoalReasonLen:
+					valid = false
+				case s != "":
+					adj.reason = &s
+				}
+			}
+		}
+		if !valid {
+			skipped++
+			rec.record("adjustment", i, date, "invalid_value")
+			continue
+		}
+		if adj.reason == nil && adj.goal == (service.GoalValues{}) {
+			skipped++
+			rec.record("adjustment", i, date, "no_values")
+			continue
+		}
+		if seen[date] {
+			skipped++
+			rec.record("adjustment", i, date, "duplicate_date")
+			continue
+		}
+		seen[date] = true
+		kept = append(kept, adj)
+	}
+	return kept, skipped
 }
 
 // importMessage renders the success text for a completed import.
@@ -449,13 +623,16 @@ func parseImportData(parsed map[string]any) importData {
 // hasUserSettings is not included here: the dry run reports it identically via
 // its own caller, and threading a fourth boolean through would obscure that
 // these two lists must stay in step.
-func importParts(entries, weights int) []string {
+func importParts(entries, weights, adjustments int) []string {
 	var parts []string
 	if entries > 0 {
 		parts = append(parts, fmt.Sprintf("%d entries", entries))
 	}
 	if weights > 0 {
 		parts = append(parts, fmt.Sprintf("%d weight records", weights))
+	}
+	if adjustments > 0 {
+		parts = append(parts, fmt.Sprintf("%d goal adjustments", adjustments))
 	}
 	return parts
 }
@@ -482,7 +659,7 @@ func importSkippedPayload(d importData) map[string]any {
 		rows = []skippedRow{}
 	}
 	return map[string]any{
-		"total":    d.skippedEntries + d.skippedWeights,
+		"total":    d.skippedTotal(),
 		"reported": len(rows),
 		"rows":     rows,
 	}
@@ -490,8 +667,8 @@ func importSkippedPayload(d importData) map[string]any {
 
 // dryRunParts mirrors what the real import reports, including user settings, so
 // the rehearsal and the performance describe the same file identically.
-func dryRunParts(entries []importEntry, weights []importWeight, hasUserSettings bool) []string {
-	parts := importParts(len(entries), len(weights))
+func dryRunParts(entries []importEntry, weights []importWeight, adjustments []importAdjustment, hasUserSettings bool) []string {
+	parts := importParts(len(entries), len(weights), len(adjustments))
 	if hasUserSettings {
 		parts = append(parts, "user settings")
 	}
@@ -566,8 +743,8 @@ func (h *EntriesHandler) Import(w http.ResponseWriter, r *http.Request) {
 		JSON(w, http.StatusOK, map[string]any{
 			"ok":      true,
 			"dry_run": true,
-			"message": importMessage(dryRunParts(toInsert, weightToInsert, hasUserSettings),
-				data.skippedEntries+data.skippedWeights) + " Nothing was written.",
+			"message": importMessage(dryRunParts(toInsert, weightToInsert, data.adjustments, hasUserSettings),
+				data.skippedTotal()) + " Nothing was written.",
 			"skipped": importSkippedPayload(data),
 		})
 		return
@@ -590,6 +767,16 @@ func (h *EntriesHandler) Import(w http.ResponseWriter, r *http.Request) {
 	}
 	if len(weightToInsert) > 0 {
 		if _, err := tx.Exec(r.Context(), "DELETE FROM weight_entries WHERE user_id = $1", user.ID); err != nil {
+			ErrorJSON(w, http.StatusInternalServerError, "Import failed.")
+			return
+		}
+	}
+
+	// Adjustments are replaced as a set, but only when the file carries some: an
+	// export from before this feature, or one from an account that never used
+	// it, must not wipe the adjustments already on the account.
+	if len(data.adjustments) > 0 {
+		if _, err := tx.Exec(r.Context(), "DELETE FROM goal_adjustments WHERE user_id = $1", user.ID); err != nil {
 			ErrorJSON(w, http.StatusInternalServerError, "Import failed.")
 			return
 		}
@@ -681,12 +868,35 @@ func (h *EntriesHandler) Import(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
+	// Adjustment rows are stored verbatim: they are complete snapshots, so
+	// nothing is filled from the account's Basisziel (unlike a thin API write).
+	// The DELETE above already cleared the set, so the upsert only guards the
+	// unique index.
+	if len(data.adjustments) > 0 {
+		batch := &pgx.Batch{}
+		for _, a := range data.adjustments {
+			g := a.goal
+			batch.Queue(`
+				INSERT INTO goal_adjustments (user_id, goal_date, calories, protein, carbs, fat, fiber, sugar, reason)
+				VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+				ON CONFLICT (user_id, goal_date) DO UPDATE SET
+					calories = EXCLUDED.calories, protein = EXCLUDED.protein, carbs = EXCLUDED.carbs,
+					fat = EXCLUDED.fat, fiber = EXCLUDED.fiber, sugar = EXCLUDED.sugar,
+					reason = EXCLUDED.reason, updated_at = NOW()`,
+				user.ID, a.date, g.Calories, g.Protein, g.Carbs, g.Fat, g.Fiber, g.Sugar, a.reason)
+		}
+		if err := execBatch(r.Context(), tx, batch); err != nil {
+			ErrorJSON(w, http.StatusInternalServerError, "Import failed.")
+			return
+		}
+	}
+
 	if err := tx.Commit(r.Context()); err != nil {
 		ErrorJSON(w, http.StatusInternalServerError, "Import failed — the file may contain invalid data.")
 		return
 	}
 
-	parts := importParts(len(toInsert), len(weightToInsert))
+	parts := importParts(len(toInsert), len(weightToInsert), len(data.adjustments))
 	if hasUserSettings {
 		parts = append(parts, "user settings")
 	}
@@ -694,7 +904,7 @@ func (h *EntriesHandler) Import(w http.ResponseWriter, r *http.Request) {
 	JSON(w, http.StatusOK, map[string]any{
 		"ok":      true,
 		"dry_run": false,
-		"message": importMessage(parts, data.skippedEntries+data.skippedWeights),
+		"message": importMessage(parts, data.skippedTotal()),
 		"skipped": importSkippedPayload(data),
 	})
 }

@@ -318,9 +318,41 @@ returns `401` when unauthenticated.
 | POST | `/settings/email/request` | Session +Local +StepUp +CSRF (strict) | Request an email-address change. |
 | POST | `/settings/email/verify` | Session +Local +CSRF | Verify the new email with a code. |
 | POST | `/settings/email/cancel` | Session +Local +CSRF | Cancel a pending email change. |
-| POST | `/settings/export` | Session +StepUp +CSRF | Export all account data. |
-| POST | `/settings/import` | Session +StepUp +CSRF | Import account data. Send `dry_run=true` to parse and report without writing — the real import DELETEs existing entries first. Responds `{ok, dry_run, message, skipped:{total, reported, rows:[{kind, index, date?, reason}]}}`; `reason` is one of `not_an_object`, `invalid_date`, `invalid_amount`, `invalid_weight`, `row_limit`, and `rows` is capped while `total` is not. |
+| POST | `/settings/export` | Session +StepUp +CSRF | Export all account data (user settings, weights, goal adjustments, entries). See [Export / import format](#export--import-format). |
+| POST | `/settings/import` | Session +StepUp +CSRF | Import account data. Send `dry_run=true` to parse and report without writing — the real import DELETEs existing entries first. Responds `{ok, dry_run, message, skipped:{total, reported, rows:[{kind, index, date?, reason}]}}`; `kind` is `entry`, `weight` or `adjustment`, `reason` is one of the codes listed under [Export / import format](#export--import-format), and `rows` is capped while `total` is not. |
 | POST | `/delete` | Session +StepUp +CSRF | Delete the account. |
+
+#### Export / import format
+
+The export is one JSON object: `exported_at`, `user`, `weights`, `goal_adjustments`, `entries`. If the export fails while streaming, the file is left truncated (invalid JSON) on purpose, so a partial backup cannot pass for a complete one.
+
+`goal_adjustments` holds the per-date goal adjustments (Tagesziel-Anpassung), newest date first:
+
+```json
+{"date": "2026-05-01", "calories": 3100, "protein": 150, "carbs": 480, "fat": 67, "fiber": 35, "sugar": 50, "reason": "Lauf 25 km"}
+```
+
+- `date` is `YYYY-MM-DD`. The values are the stored absolute snapshot. A value without a goal and an absent reason are omitted rather than `null`; on import, absent and `null` mean the same.
+- Import validates each row with the same bounds as the API: `calories` is a whole number 1–9999, each macro a whole number 0–9999 (0 means no goal and is stored as unset), `reason` a string of at most 120 characters (trimmed; blank means none). Values must be JSON numbers, not strings.
+- Rows are stored verbatim. Import does not fill unsent values from the Basisziel (that is what a thin `PUT /goals/{date}` does); the file is a backup of complete snapshots.
+- Import replaces the account's adjustments as a set, but only if the file carries at least one valid adjustment row. A file without the key (exports from before this feature) or with an empty array leaves existing adjustments untouched. A file with only adjustments is a valid import; it touches nothing else.
+- Max 10,000 adjustment rows per file; the rest are skipped as `row_limit`.
+- Created/updated timestamps are not exported; imported rows get the import time.
+
+Skip reasons (`skipped.rows[].reason`), per `kind`:
+
+| kind | reason | meaning |
+|------|--------|---------|
+| any | `not_an_object` | the array element is not a JSON object |
+| any | `invalid_date` | `date` missing, malformed or out of range (not echoed back in the row) |
+| any | `row_limit` | past the 10,000-row cap |
+| `entry` | `invalid_amount` | amount unparseable, zero or out of range |
+| `weight` | `invalid_weight` | weight unparseable or out of range |
+| `adjustment` | `invalid_value` | a value is not a whole number in range, or `reason` is not a string / too long |
+| `adjustment` | `no_values` | no goal value and no reason in the row |
+| `adjustment` | `duplicate_date` | an earlier row already used this date; the first one wins |
+
+The dry run reports the same counts and skips as the real import, with the message suffix "Nothing was written."
 
 ### Account links
 
