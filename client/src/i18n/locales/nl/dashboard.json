@@ -134,6 +134,22 @@
       "own": "Eigen"
     }
   },
+  "goalAdjust": {
+    "caloriesAuto": "Berekend uit je macro's",
+    "caloriesLabel": "Calorieën (kcal)",
+    "cancel": "Annuleren",
+    "kcal": "{{amount}} kcal",
+    "macroLabel": "{{macro}} (g)",
+    "noReason": "Geen reden",
+    "reasonLabel": "Reden (optioneel)",
+    "reasonPlaceholder": "bijv. Lange duurloop",
+    "recentTitle": "Recente aanpassingen",
+    "reset": "Terug naar basisdoel",
+    "resetFailed": "Het doel kon niet worden hersteld.",
+    "save": "Opslaan",
+    "saveFailed": "Het doel kon niet worden opgeslagen.",
+    "title": "Doel van deze dag aanpassen"
+  },
   "meal": {
     "addPage": {
       "back": "Terug naar de maaltijd",
@@ -350,6 +366,20 @@
   },
   "store": {
     "you": "Jij"
+  },
+  "todayPanel": {
+    "adjusted": "aangepast",
+    "adjustedReason": "aangepast: {{reason}}",
+    "base": "Basis {{calories}}",
+    "editGoal": "Dagdoel aanpassen",
+    "grams": "{{eaten}} g",
+    "gramsOfGoal": "{{eaten}} / {{goal}} g",
+    "kcalLeft": "nog {{amount}} kcal",
+    "kcalOver": "{{amount}} kcal erover",
+    "ofGoal": "/ {{goal}} kcal",
+    "sourceBar": "Calorieën per bron",
+    "sourceItem": "{{macro}} {{kcal}} kcal",
+    "title": "Voeding van de dag"
   },
   "todos": {
     "sectionTitle": "Taken",

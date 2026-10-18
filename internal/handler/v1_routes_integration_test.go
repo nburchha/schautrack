@@ -334,6 +334,8 @@ func bodyFor(rt v1Route) string {
 	switch rt.Pattern {
 	case "/weight/{date}":
 		return `{"weight":82.4}`
+	case "/goals/{date}":
+		return `{"calories":2400}`
 	case "/notes/{date}":
 		return `{"content":"hello"}`
 	case "/todos/{id}/completions/{date}":

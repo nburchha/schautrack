@@ -134,6 +134,22 @@
       "own": "Eigenes"
     }
   },
+  "goalAdjust": {
+    "caloriesAuto": "Aus deinen Makros berechnet",
+    "caloriesLabel": "Kalorien (kcal)",
+    "cancel": "Abbrechen",
+    "kcal": "{{amount}} kcal",
+    "macroLabel": "{{macro}} (g)",
+    "noReason": "Kein Grund",
+    "reasonLabel": "Grund (optional)",
+    "reasonPlaceholder": "z. B. Langer Lauf",
+    "recentTitle": "Zuletzt verwendet",
+    "reset": "Auf Basisziel zurücksetzen",
+    "resetFailed": "Das Ziel konnte nicht zurückgesetzt werden.",
+    "save": "Speichern",
+    "saveFailed": "Das Ziel konnte nicht gespeichert werden.",
+    "title": "Tagesziel anpassen"
+  },
   "meal": {
     "addPage": {
       "back": "Zurück zur Mahlzeit",
@@ -350,6 +366,20 @@
   },
   "store": {
     "you": "Du"
+  },
+  "todayPanel": {
+    "adjusted": "angepasst",
+    "adjustedReason": "angepasst: {{reason}}",
+    "base": "Basis {{calories}}",
+    "editGoal": "Tagesziel anpassen",
+    "grams": "{{eaten}} g",
+    "gramsOfGoal": "{{eaten}} / {{goal}} g",
+    "kcalLeft": "noch {{amount}} kcal",
+    "kcalOver": "{{amount}} kcal drüber",
+    "ofGoal": "/ {{goal}} kcal",
+    "sourceBar": "Kalorien nach Quelle",
+    "sourceItem": "{{macro}} {{kcal}} kcal",
+    "title": "Tagesübersicht Ernährung"
   },
   "todos": {
     "sectionTitle": "Todos",

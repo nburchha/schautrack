@@ -7,6 +7,7 @@ import { completeStepUp } from './fixtures/stepup';
 
 const baseURL = process.env.E2E_BASE_URL || 'http://localhost:3001';
 let user: { email: string; password: string; id: string };
+const exportCopy = path.join(os.tmpdir(), `schautrack-export-roundtrip-${Date.now()}.json`);
 
 test.describe('Data Export / Import', () => {
   test.describe.configure({ mode: 'serial' });
@@ -36,6 +37,10 @@ test.describe('Data Export / Import', () => {
     psql(`INSERT INTO calorie_entries (user_id, entry_date, amount, entry_name) VALUES (${user.id}, '2026-01-15', 350, 'E2E Export Meal') ON CONFLICT DO NOTHING`);
     psql(`INSERT INTO weight_entries (user_id, entry_date, weight, body_fat) VALUES (${user.id}, '2026-01-15', 72.5, 21.4) ON CONFLICT (user_id, entry_date) DO UPDATE SET weight = 72.5, body_fat = 21.4`);
     psql(`INSERT INTO weight_entries (user_id, entry_date, weight) VALUES (${user.id}, '2026-01-16', 72.1) ON CONFLICT (user_id, entry_date) DO UPDATE SET weight = 72.1, body_fat = NULL`);
+
+    psql(`DELETE FROM goal_adjustments WHERE user_id = ${user.id}`);
+    psql(`INSERT INTO goal_adjustments (user_id, goal_date, calories, protein, carbs, fat, fiber, reason) VALUES (${user.id}, '2026-01-15', 3100, 150, 480, 67, 35, 'E2E Lauf 25 km')`);
+    psql(`INSERT INTO goal_adjustments (user_id, goal_date, calories) VALUES (${user.id}, '2026-01-16', 2400)`);
 
     await loginAndGo(page, '/account');
 
@@ -94,6 +99,25 @@ test.describe('Data Export / Import', () => {
     expect(weightOnly).toBeDefined();
     expect('body_fat' in weightOnly).toBe(false);
 
+    // Goal adjustments ride along as complete snapshots with the reason.
+    expect(Array.isArray(data.goal_adjustments)).toBe(true);
+    const adjusted = data.goal_adjustments.find((a: { date: string }) => a.date === '2026-01-15');
+    expect(adjusted).toEqual({
+      date: '2026-01-15',
+      calories: 3100,
+      protein: 150,
+      carbs: 480,
+      fat: 67,
+      fiber: 35,
+      reason: 'E2E Lauf 25 km',
+    });
+    // Unset goals and an absent reason are omitted, not exported as null.
+    const calOnly = data.goal_adjustments.find((a: { date: string }) => a.date === '2026-01-16');
+    expect(calOnly).toEqual({ date: '2026-01-16', calories: 2400 });
+
+    // Round trip: keep the file for the import test below.
+    fs.copyFileSync(downloadPath!, exportCopy);
+
     await ctx.close();
   });
 
@@ -136,6 +160,10 @@ test.describe('Data Export / Import', () => {
           date: '2026-03-11',
           weight: 67.8,
         },
+      ],
+      goal_adjustments: [
+        { date: '2026-03-10', calories: 2900, carbs: 410, reason: 'E2E Import Long run' },
+        { date: '2026-03-11', calories: 2100 },
       ],
     };
 
@@ -185,6 +213,20 @@ test.describe('Data Export / Import', () => {
     );
     expect(parseFloat(importedBodyFat)).toBeCloseTo(19.8);
 
+    // Adjustments replace the set and come back as written: nothing is filled
+    // from the Basisziel, and the reason survives.
+    expect(psql(`SELECT COUNT(*) FROM goal_adjustments WHERE user_id = ${user.id}`)).toBe('2');
+    expect(
+      psql(
+        `SELECT calories || '/' || COALESCE(protein::text, 'null') || '/' || carbs || '/' || reason FROM goal_adjustments WHERE user_id = ${user.id} AND goal_date = '2026-03-10'`
+      )
+    ).toBe('2900/null/410/E2E Import Long run');
+    expect(
+      psql(
+        `SELECT COALESCE(reason, 'null') FROM goal_adjustments WHERE user_id = ${user.id} AND goal_date = '2026-03-11'`
+      )
+    ).toBe('null');
+
     // A row without the key imports as NULL, not as a copy of a neighbour.
     const noBodyFat = psql(
       `SELECT COALESCE(body_fat::text, 'null') FROM weight_entries WHERE user_id = ${user.id} AND entry_date = '2026-03-11'`
@@ -195,6 +237,41 @@ test.describe('Data Export / Import', () => {
     // restored readings are visible without hunting for a setting.
     const enabled = psql(`SELECT body_fat_enabled FROM users WHERE id = ${user.id}`);
     expect(enabled).toBe('t');
+
+    await ctx.close();
+  });
+
+  test('re-importing an export restores the goal adjustments', async ({ browser }) => {
+    const ctx = await browser.newContext({ storageState: { cookies: [], origins: [] } });
+    const page = await ctx.newPage();
+
+    // The export from the first test; wipe what the previous import left.
+    expect(fs.existsSync(exportCopy)).toBe(true);
+    psql(`DELETE FROM goal_adjustments WHERE user_id = ${user.id}`);
+
+    await loginAndGo(page, '/account');
+    const fileChooserButton = page.locator('button', { hasText: 'Choose a file' });
+    await fileChooserButton.scrollIntoViewIfNeeded({ timeout: 10000 });
+    await page.locator('input[type="file"][accept=".json,application/json"]').setInputFiles(exportCopy);
+
+    expireStepUpGrace(user.id);
+    await page.getByRole('button', { name: 'Import', exact: true }).click();
+    await page.getByRole('button', { name: 'Replace all entries', exact: true }).click();
+    await completeStepUp(page, user.password);
+    await expect(page.getByText(/Imported/i)).toBeVisible({ timeout: 15000 });
+    fs.unlinkSync(exportCopy);
+
+    expect(psql(`SELECT COUNT(*) FROM goal_adjustments WHERE user_id = ${user.id}`)).toBe('2');
+    expect(
+      psql(
+        `SELECT concat_ws('/', calories, protein, carbs, fat, fiber, reason) FROM goal_adjustments WHERE user_id = ${user.id} AND goal_date = '2026-01-15'`
+      )
+    ).toBe('3100/150/480/67/35/E2E Lauf 25 km');
+    expect(
+      psql(
+        `SELECT concat_ws('/', calories, protein, carbs, fat, fiber, sugar, reason) FROM goal_adjustments WHERE user_id = ${user.id} AND goal_date = '2026-01-16'`
+      )
+    ).toBe('2400');
 
     await ctx.close();
   });

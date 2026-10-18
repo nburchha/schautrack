@@ -134,6 +134,22 @@
       "own": "Own"
     }
   },
+  "goalAdjust": {
+    "caloriesAuto": "Calculated from your macros",
+    "caloriesLabel": "Calories (kcal)",
+    "cancel": "Cancel",
+    "kcal": "{{amount}} kcal",
+    "macroLabel": "{{macro}} (g)",
+    "noReason": "No reason",
+    "reasonLabel": "Reason (optional)",
+    "reasonPlaceholder": "e.g. Long run",
+    "recentTitle": "Recent adjustments",
+    "reset": "Reset to base goal",
+    "resetFailed": "Could not reset the goal.",
+    "save": "Save",
+    "saveFailed": "Could not save the goal.",
+    "title": "Adjust goal for this day"
+  },
   "meal": {
     "addPage": {
       "add": "Add",
@@ -350,6 +366,20 @@
   },
   "store": {
     "you": "You"
+  },
+  "todayPanel": {
+    "adjusted": "adjusted",
+    "adjustedReason": "adjusted: {{reason}}",
+    "base": "Base {{calories}}",
+    "editGoal": "Adjust goal for this day",
+    "grams": "{{eaten}} g",
+    "gramsOfGoal": "{{eaten}} / {{goal}} g",
+    "kcalLeft": "{{amount}} kcal left",
+    "kcalOver": "{{amount}} kcal over",
+    "ofGoal": "/ {{goal}} kcal",
+    "sourceBar": "Calories by source",
+    "sourceItem": "{{macro}} {{kcal}} kcal",
+    "title": "Daily nutrition"
   },
   "todos": {
     "addButton": "Add",

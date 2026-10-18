@@ -5,13 +5,13 @@ import { useRequireAuth } from '@/hooks/useAuth';
 import { getDashboard, getDayEntries } from '@/api/entries';
 import { getWeightDay } from '@/api/weight';
 import { useDashboardStore } from '@/stores/dashboardStore';
-import { computeMacroStatus } from '@/lib/macros';
 import { formatDate } from '@/lib/format';
 import { QueryError } from '@/components/ui/QueryError';
 import { SectionLabel } from '@/components/ui/SectionLabel';
 import { Sheet } from '@/components/ui/Sheet';
 import { Fab } from '@/components/ui/Fab';
 import TodayPanel from './TodayPanel';
+import AdjustmentSheet from './AdjustmentSheet';
 import EntryForm from './EntryForm';
 import SavedFoodsRow from './SavedFoodsRow';
 import Timeline from './Timeline';
@@ -28,6 +28,7 @@ export default function Dashboard() {
   const dateInputRef = useRef<HTMLInputElement>(null);
   const { selectedDate, currentUserId, currentLabel, canEdit, rangePreset, rangeStart, rangeEnd, selectUser, selectDay } = useDashboardStore();
   const [addOpen, setAddOpen] = useState(false);
+  const [goalOpen, setGoalOpen] = useState(false);
 
   // Fetch dashboard data
   const { data: dashboard, isLoading, isError, error, isFetching, refetch } = useQuery({
@@ -55,13 +56,19 @@ export default function Dashboard() {
   const showCat = (cat: 'nutrition' | 'weight' | 'todos' | 'notes') =>
     canEdit || !!activeView?.shares?.[cat];
 
+  // Switching DAY keeps the previous day on screen while the next loads (no
+  // flicker), but switching ACCOUNT must not: it would show one account's goal
+  // and entries under another's name. Both keys are [name, userId, date].
+  const keepSameUser = <T,>(prev: T | undefined, prevQuery?: { queryKey: readonly unknown[] }) =>
+    prevQuery?.queryKey[1] === effectiveUserId ? prev : undefined;
+
   // Fetch entries for selected day
-  const { data: dayData } = useQuery({
+  const { data: dayData, isPending: dayPending, isPlaceholderData: dayIsPlaceholder } = useQuery({
     queryKey: ['day-entries', effectiveUserId, selectedDate],
     // eslint-disable-next-line @typescript-eslint/no-non-null-assertion -- `enabled` below gates this queryFn on effectiveUserId being set
     queryFn: () => getDayEntries(effectiveUserId!, selectedDate),
     enabled: !!effectiveUserId && !!selectedDate,
-    placeholderData: keepPreviousData,
+    placeholderData: keepSameUser,
   });
 
   // Fetch weight for selected day
@@ -69,21 +76,19 @@ export default function Dashboard() {
     queryKey: ['weight', effectiveUserId, selectedDate],
     queryFn: () => getWeightDay(selectedDate, effectiveUserId),
     enabled: !!effectiveUserId && !!selectedDate,
-    placeholderData: keepPreviousData,
+    placeholderData: keepSameUser,
   });
 
-  // Compute selected day's totals from entries
-  // eslint-disable-next-line react-hooks/preserve-manual-memoization -- deps are optional-chained subpaths, finer-grained than the compiler can verify
-  const selectedTotal = useMemo(() => {
-    if (!dayData?.entries) return dashboard?.todayTotal ?? 0;
-    return dayData.entries.reduce((sum, e) => sum + (e.amount || 0), 0);
-  }, [dayData?.entries, dashboard?.todayTotal]);
+  // Totals of the selected day come from the same response as its goal, so the
+  // panel never pairs one day's entries with another day's Tagesziel.
+  const selectedTotal = useMemo(
+    () => (dayData?.entries ?? []).reduce((sum, e) => sum + (e.amount || 0), 0),
+    [dayData?.entries],
+  );
 
-  // eslint-disable-next-line react-hooks/preserve-manual-memoization -- same: optional-chained deps
   const selectedMacroTotals = useMemo(() => {
-    if (!dayData?.entries) return dashboard?.todayMacroTotals ?? {};
     const totals: Record<string, number> = {};
-    for (const e of dayData.entries) {
+    for (const e of dayData?.entries ?? []) {
       if (e.macros) {
         for (const [key, val] of Object.entries(e.macros)) {
           if (val != null) totals[key] = (totals[key] || 0) + val;
@@ -91,23 +96,10 @@ export default function Dashboard() {
       }
     }
     return totals;
-  }, [dayData?.entries, dashboard?.todayMacroTotals]);
+  }, [dayData?.entries]);
 
-  const selectedCalorieStatus = useMemo(() => {
-    if (!dashboard) return { statusClass: '', statusText: '' };
-    return computeMacroStatus(selectedTotal, dashboard.dailyGoal, dashboard.macroModes?.calories || 'limit', dashboard.user.goalThreshold);
-  }, [selectedTotal, dashboard]);
-
-  const selectedMacroStatuses = useMemo(() => {
-    if (!dashboard) return {};
-    const statuses: Record<string, { statusClass: string; statusText: string }> = {};
-    for (const key of dashboard.enabledMacros) {
-      const total = selectedMacroTotals[key] || 0;
-      const goal = dashboard.macroGoals[key] ?? null;
-      statuses[key] = computeMacroStatus(total, goal, dashboard.macroModes?.[key] || 'limit', dashboard.user.goalThreshold);
-    }
-    return statuses;
-  }, [selectedMacroTotals, dashboard]);
+  // Placeholder data from a neighbouring day is never presented as this day's goal.
+  const dayGoal = dayData?.goal?.date === selectedDate ? dayData.goal : undefined;
 
   if (isError && !dashboard) {
     return <QueryError error={error} onRetry={() => refetch()} retrying={isFetching} />;
@@ -163,19 +155,28 @@ export default function Dashboard() {
         </div>
       </header>
 
-      {showCat('nutrition') && (
+      {/* The panel only ever shows the goal OF the selected day. While the next
+          day (or account) is still loading, a same-height skeleton holds the
+          space so the page below does not jump. */}
+      {showCat('nutrition') && dayGoal && (
         <TodayPanel
-          dailyGoal={dashboard.dailyGoal}
-          todayTotal={selectedTotal}
-          caloriesEnabled={dashboard.caloriesEnabled}
-          calorieStatus={selectedCalorieStatus}
-          enabledMacros={dashboard.enabledMacros}
-          macroGoals={dashboard.macroGoals}
-          todayMacroTotals={selectedMacroTotals}
-          macroStatuses={selectedMacroStatuses}
-          macroModes={dashboard.macroModes}
-          selectedDate={selectedDate}
-          todayStr={dashboard.todayStr}
+          goal={dayGoal}
+          eatenCalories={selectedTotal}
+          macroTotals={selectedMacroTotals}
+          onEdit={canEdit ? () => setGoalOpen(true) : undefined}
+        />
+      )}
+      {showCat('nutrition') && !dayGoal && (dayPending || dayIsPlaceholder) && (
+        <div data-testid="today-panel-skeleton" aria-hidden="true" className="surface min-h-48 animate-pulse" />
+      )}
+
+      {/* Own account only: a linked account's goals are read-only. */}
+      {canEdit && dayGoal && (
+        <AdjustmentSheet
+          open={goalOpen}
+          onClose={() => setGoalOpen(false)}
+          goal={dayGoal}
+          autoCalcCalories={dashboard.autoCalcCalories}
         />
       )}
 

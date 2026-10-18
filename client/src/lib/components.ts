@@ -1,5 +1,5 @@
 import type { ComponentMacros, EntryComponent, Food } from '@/types';
-import { MACRO_KEYS, type MacroKey } from '@/lib/macros';
+import { KCAL_PER_GRAM, MACRO_KEYS, type MacroKey } from '@/lib/macros';
 import { activeLocale, formatNumber } from '@/lib/format';
 import { parseAmount } from '@/lib/mathParser';
 
@@ -15,9 +15,6 @@ export const MACRO_FIELD: Record<MacroKey, keyof ComponentMacros> = {
   fiber: 'fiber_g',
   sugar: 'sugar_g',
 };
-
-/** Atwater factors (kcal per gram) for the energy split. Fiber is left out on purpose. */
-const KCAL_PER_GRAM = { protein: 4, carbs: 4, fat: 9 } as const;
 
 export interface PortionNutrients {
   kcal: number;

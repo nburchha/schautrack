@@ -76,7 +76,7 @@ if [ -z "$TOKEN" ]; then
   # Every grantable scope: the point is to reach every endpoint, so a 403 is
   # never the reason coverage stopped. Scopes themselves are covered by the Go
   # tests.
-  SCOPES="entries:read,entries:write,weight:read,weight:write,todos:read,todos:write,foods:read,foods:write,notes:read,notes:write,plan:read,links:read,settings:read,settings:write"
+  SCOPES="entries:read,entries:write,weight:read,weight:write,todos:read,todos:write,foods:read,foods:write,notes:read,notes:write,goals:read,goals:write,plan:read,links:read,settings:read,settings:write"
 
   echo "==> seeding a contract-test user and token"
   psql <<SQL >/dev/null

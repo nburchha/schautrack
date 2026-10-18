@@ -213,6 +213,7 @@ func Build(version, baseURL string) *Document {
 			{Name: "Account", Description: "Who the token belongs to and what it may do."},
 			{Name: "Entries", Description: "Calorie entries and their macros."},
 			{Name: "Weight", Description: "Daily weight readings."},
+			{Name: "Goals", Description: "The goal that applies on a date, with per-date adjustments."},
 			{Name: "Todos", Description: "Recurring todos and their completions."},
 			{Name: "Saved foods", Description: "Reusable quick-add foods."},
 			{Name: "Foods", Description: "The searchable food catalog, with nutrients per 100 g."},
@@ -450,6 +451,33 @@ func schemas() map[string]*Schema {
 			"next_cursor": nullStr("Pass back as `cursor` to fetch the next page. Opaque — do not parse."),
 		}, "data"),
 
+		"GoalValues": object("A goal: calories and the five macros. `null` where no goal is set or the account does not track it.",
+			goalValueProps(), service.GoalKeys...),
+		"Goal": object("The goal that applies on one date (the Tagesziel): the day's adjustment when there is one, otherwise the permanent goal. "+
+			"Only calories and macros the account tracks are reported; everything else is `null`, as is any value with no goal set.",
+			mergeProps(map[string]*Schema{
+				"date":     dateStr("The day this goal applies to."),
+				"adjusted": boolean("Whether the day has its own adjustment. `false` means the values are the permanent goal."),
+				"reason":   nullStr("Why the day is adjusted. `null` when unadjusted or no reason was given."),
+				"base": nullableRef("GoalValues", "The permanent goal the adjusted day differs from, as it is now. "+
+					"`null` unless `adjusted`."),
+				"updated_at": nullable(dateTime("When the adjustment was last written (UTC). `null` when unadjusted.")),
+			}, goalValueProps()),
+			append([]string{"date", "adjusted", "reason", "base", "updated_at"}, service.GoalKeys...)...),
+		"GoalInput": object("An adjustment for one date. Send only what differs: every number you leave out is "+
+			"filled from the permanent goal as it is at the moment of the request, and is then frozen — a later "+
+			"change to the permanent goal does not touch an adjusted day. At least one field is required.",
+			map[string]*Schema{
+				"calories": withRange(integer("Calorie goal. Rejected when the account hides calories."), 1, service.MaxGoalCalories),
+				"protein":  withRange(integer("Protein goal in grams. 0 means no goal. Rejected when the macro is not enabled."), 0, service.MaxGoalMacro),
+				"carbs":    withRange(integer("Carbohydrate goal in grams. 0 means no goal. Rejected when the macro is not enabled."), 0, service.MaxGoalMacro),
+				"fat":      withRange(integer("Fat goal in grams. 0 means no goal. Rejected when the macro is not enabled."), 0, service.MaxGoalMacro),
+				"fiber":    withRange(integer("Fiber goal in grams. 0 means no goal. Rejected when the macro is not enabled."), 0, service.MaxGoalMacro),
+				"sugar":    withRange(integer("Sugar goal in grams. 0 means no goal. Rejected when the macro is not enabled."), 0, service.MaxGoalMacro),
+				"reason": {Type: "string", MaxLength: &goalReasonMax,
+					Description: "Why the day differs, e.g. `Lauf 25 km`. Trimmed; empty is stored as no reason."},
+			}),
+
 		"Weight": object("A weight reading. One per account per day.", map[string]*Schema{
 			"date":       dateStr("The day this reading belongs to."),
 			"weight":     number("The reading, in `unit`."),
@@ -610,8 +638,11 @@ func schemas() map[string]*Schema {
 				"timezone":    str("IANA time zone. Determines what `today` and every bare date mean."),
 				"weight_unit": {Type: "string", Enum: []any{"kg", "lb"}, Description: "The unit weight readings are stored in."},
 				"daily_goal":  nullInt("Effective daily calorie goal (the app's calorie macro goal, else the legacy value), if set."),
-				"language":    nullStr("UI language, if set."),
-			}, "id", "email", "timezone", "weight_unit", "daily_goal", "language"),
+				"goals": describedRef("GoalValues", "The permanent goal (Basisziel), raw: every value that is stored, "+
+					"including macros the account does not currently track. Not the goal of any particular date — use "+
+					"`GET /goals/{date}` for that. Writable via `PATCH /me`; `calories` here is `daily_goal`."),
+				"language": nullStr("UI language, if set."),
+			}, "id", "email", "timezone", "weight_unit", "daily_goal", "goals", "language"),
 			"token": object("The token that authenticated this request.", map[string]*Schema{
 				"id":         integer("Token identifier."),
 				"name":       str("The label given when it was created."),
@@ -687,6 +718,19 @@ func schemas() map[string]*Schema {
 			"timezone":    str("IANA time zone name, e.g. `Europe/Berlin`. Decides what every bare date means."),
 			"weight_unit": {Type: "string", Enum: []any{"kg", "lb"}, Description: "Display unit. Changing it does NOT convert stored readings — they are kept as entered."},
 			"language":    nullStr("UI language: one of en, de, es, fr, it, nl, pl, pt. `null` restores automatic."),
+			"goals": object("Macro goals of the permanent goal (Basisziel). Each key you send is merged into the stored "+
+				"goal; keys you leave out are untouched, and the rest of the goal (including the calorie goal and the "+
+				"limit/target modes) is never replaced. `null` or `0` clears a goal. Calories are set with `daily_goal`. "+
+				"A macro the account does not track is rejected with `422` (clearing it is allowed). "+
+				"Requires the `goals:write` scope in addition to `settings:write`; a token without it gets `403` "+
+				"when this object carries any key, and can still set everything else.",
+				map[string]*Schema{
+					"protein": withRange(nullInt("Protein goal in grams."), 0, service.MaxGoalMacro),
+					"carbs":   withRange(nullInt("Carbohydrate goal in grams."), 0, service.MaxGoalMacro),
+					"fat":     withRange(nullInt("Fat goal in grams."), 0, service.MaxGoalMacro),
+					"fiber":   withRange(nullInt("Fiber goal in grams."), 0, service.MaxGoalMacro),
+					"sugar":   withRange(nullInt("Sugar goal in grams."), 0, service.MaxGoalMacro),
+				}),
 		}),
 
 		"EstimateInput": object("A food photo to estimate.", map[string]*Schema{
@@ -1005,7 +1049,8 @@ func paths() map[string]*PathItem {
 				Description: "Only settings that affect how the rest of the API behaves are writable. " +
 					"Authentication settings (password, 2FA, passkeys, email) are deliberately NOT — those are " +
 					"step-up gated in the app, and step-up is meaningless for a bearer token, so allowing them " +
-					"would turn one leaked token into account takeover.",
+					"would turn one leaked token into account takeover. Changing the macro `goals` additionally " +
+					"requires `goals:write` (checked on the request body, answered `403` if missing).",
 				Tags:        []string{"Account"},
 				Scope:       service.ScopeSettingsWrite,
 				Security:    []SecurityRequirement{{"bearerAuth": {service.ScopeSettingsWrite}}},
@@ -1157,6 +1202,49 @@ func paths() map[string]*PathItem {
 				"400": respRef("BadRequest"), "422": respRef("Unprocessable"),
 			}, errs(nil)),
 		}},
+		"/goals/{date}": {
+			Get: &Operation{
+				OperationID: "getGoal", Summary: "Fetch the goal for a date",
+				Description: "The goal that applies on the date: the day's adjustment when it has one, otherwise the permanent goal. " +
+					"Always answers 200, also for an account that has no goal at all (every number is then `null`). " +
+					"An adjusted day also reports the permanent goal it differs from in `base`.",
+				Tags: []string{"Goals"}, Scope: service.ScopeGoalsRead,
+				Security:   []SecurityRequirement{{"bearerAuth": {service.ScopeGoalsRead}}},
+				Parameters: []Parameter{dateParam},
+				Responses: merge(map[string]*Response{
+					"200": ok200("The goal for the date.", ref("Goal")),
+					"400": respRef("BadRequest"),
+				}, errs(nil)),
+			},
+			Put: &Operation{
+				OperationID: "putGoal", Summary: "Adjust the goal for a date",
+				Description: "Replaces the day's adjustment with a complete snapshot. Send only what differs; every number you " +
+					"leave out is filled from the permanent goal as it is now (never from a previous adjustment). " +
+					"Any date is allowed, past or future. Idempotent: repeating the request yields the same state. " +
+					"Returns 201 the first time a date is adjusted and 200 thereafter, with the resulting goal. " +
+					"A number that is out of range, a macro the account does not track, or `calories` on an account that hides calories is a 422 naming the field.",
+				Tags: []string{"Goals"}, Scope: service.ScopeGoalsWrite,
+				Security:    []SecurityRequirement{{"bearerAuth": {service.ScopeGoalsWrite}}},
+				Parameters:  []Parameter{dateParam},
+				RequestBody: &RequestBody{Required: true, Content: jsonBody(ref("GoalInput"))},
+				Responses: merge(map[string]*Response{
+					"200": ok200("The adjustment was replaced.", ref("Goal")),
+					"201": created201("The date was adjusted.", ref("Goal"), "URL of the goal."),
+					"400": respRef("BadRequest"), "422": respRef("Unprocessable"),
+				}, errs(nil)),
+			},
+			Delete: &Operation{
+				OperationID: "deleteGoal", Summary: "Reset a date to the permanent goal",
+				Description: "Removes the day's adjustment. Answers 204 also when the date had none.",
+				Tags:        []string{"Goals"}, Scope: service.ScopeGoalsWrite,
+				Security:   []SecurityRequirement{{"bearerAuth": {service.ScopeGoalsWrite}}},
+				Parameters: []Parameter{dateParam},
+				Responses: merge(map[string]*Response{
+					"204": noContent204, "400": respRef("BadRequest"),
+				}, errs(nil)),
+			},
+		},
+
 		"/weight/{date}": {
 			Get: &Operation{
 				OperationID: "getWeight", Summary: "Fetch one day's weight",
@@ -1511,4 +1599,18 @@ func merge(primary, fallback map[string]*Response) map[string]*Response {
 		out[k] = v
 	}
 	return out
+}
+
+var goalReasonMax = service.MaxGoalReasonLen
+
+// goalValueProps is the six nullable numbers shared by Goal and GoalValues.
+func goalValueProps() map[string]*Schema {
+	return map[string]*Schema{
+		"calories": nullInt("Calorie goal."),
+		"protein":  nullInt("Protein goal in grams."),
+		"carbs":    nullInt("Carbohydrate goal in grams."),
+		"fat":      nullInt("Fat goal in grams."),
+		"fiber":    nullInt("Fiber goal in grams."),
+		"sugar":    nullInt("Sugar goal in grams."),
+	}
 }

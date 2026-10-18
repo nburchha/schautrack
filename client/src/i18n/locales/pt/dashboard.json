@@ -134,6 +134,22 @@
       "own": "Próprio"
     }
   },
+  "goalAdjust": {
+    "caloriesAuto": "Calculadas a partir dos seus macros",
+    "caloriesLabel": "Calorias (kcal)",
+    "cancel": "Cancelar",
+    "kcal": "{{amount}} kcal",
+    "macroLabel": "{{macro}} (g)",
+    "noReason": "Sem motivo",
+    "reasonLabel": "Motivo (opcional)",
+    "reasonPlaceholder": "ex.: Corrida longa",
+    "recentTitle": "Ajustes recentes",
+    "reset": "Repor a meta base",
+    "resetFailed": "Não foi possível repor a meta.",
+    "save": "Guardar",
+    "saveFailed": "Não foi possível guardar a meta.",
+    "title": "Ajustar a meta deste dia"
+  },
   "meal": {
     "addPage": {
       "back": "Voltar à refeição",
@@ -350,6 +366,20 @@
   },
   "store": {
     "you": "Você"
+  },
+  "todayPanel": {
+    "adjusted": "ajustado",
+    "adjustedReason": "ajustado: {{reason}}",
+    "base": "Base {{calories}}",
+    "editGoal": "Ajustar a meta do dia",
+    "grams": "{{eaten}} g",
+    "gramsOfGoal": "{{eaten}} / {{goal}} g",
+    "kcalLeft": "faltam {{amount}} kcal",
+    "kcalOver": "{{amount}} kcal acima",
+    "ofGoal": "/ {{goal}} kcal",
+    "sourceBar": "Calorias por origem",
+    "sourceItem": "{{macro}} {{kcal}} kcal",
+    "title": "Nutrição do dia"
   },
   "todos": {
     "sectionTitle": "Tarefas",

@@ -503,6 +503,40 @@ func ensureBackupCodesSchema(ctx context.Context, pool *pgxpool.Pool) error {
 	})
 }
 
+// ensureGoalAdjustmentsSchema creates the per-date Tagesziel-Anpassung table
+// (ADR 0007): one complete snapshot of the goal for a single date, per user.
+//
+// Values are nullable because a Basisziel may leave a macro unset; the gap-fill
+// at save time copies "unset" faithfully. There is deliberately no CHECK on the
+// values: the service validates before writing, and stored snapshots must stay
+// readable even if the bounds are later changed.
+//
+// One row per (user, date) is the unique key. A future Basisziel history
+// ("gueltig ab") can live in a sibling table keyed the same way; nothing here
+// assumes the surrogate id is meaningful.
+func ensureGoalAdjustmentsSchema(ctx context.Context, pool *pgxpool.Pool) error {
+	return withTransaction(ctx, pool, func(tx pgx.Tx) error {
+		_, err := tx.Exec(ctx, `
+			CREATE TABLE IF NOT EXISTS goal_adjustments (
+				id SERIAL PRIMARY KEY,
+				user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+				goal_date DATE NOT NULL,
+				calories INTEGER,
+				protein INTEGER,
+				carbs INTEGER,
+				fat INTEGER,
+				fiber INTEGER,
+				sugar INTEGER,
+				reason TEXT,
+				created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+				updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+			);
+			CREATE UNIQUE INDEX IF NOT EXISTS goal_adjustments_user_date_idx ON goal_adjustments (user_id, goal_date);
+			CREATE INDEX IF NOT EXISTS goal_adjustments_user_updated_idx ON goal_adjustments (user_id, updated_at DESC)`)
+		return err
+	})
+}
+
 func ensureDailyNotesSchema(ctx context.Context, pool *pgxpool.Pool) error {
 	return withTransaction(ctx, pool, func(tx pgx.Tx) error {
 		_, err := tx.Exec(ctx, `ALTER TABLE users ADD COLUMN IF NOT EXISTS notes_enabled BOOLEAN DEFAULT FALSE`)
@@ -1088,6 +1122,7 @@ func migrationSteps() []migrationStep {
 		{"backup_codes", ensureBackupCodesSchema},
 		{"invite", ensureInviteSchema},
 		{"body_fat", ensureBodyFatSchema},
+		{"goal_adjustments", ensureGoalAdjustmentsSchema},
 		// Data migrations (depend on columns created by "macros")
 		{"calorie_goal_to_macro_goals", migrateCalorieGoalToMacroGoals},
 		{"auto_calc_calories", migrateAutoCalcCalories},

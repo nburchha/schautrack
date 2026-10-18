@@ -1,5 +1,6 @@
 import { test, expect } from '@playwright/test';
 import { psql, createIsolatedUser, loginUser, openAddFood } from './fixtures/helpers';
+import { expectNoWarningColors } from './fixtures/panel';
 
 const baseURL = process.env.E2E_BASE_URL || 'http://localhost:3001';
 let user: { email: string; password: string; id: string };
@@ -103,7 +104,7 @@ test.describe.serial('Macro Threshold', () => {
     await ctx.close();
   });
 
-  test('protein bar with target mode shows success (not destructive) styling when over target', async ({ browser }) => {
+  test('protein over its target shows the numbers without a destructive colour', async ({ browser }) => {
     // Enable protein in target mode for this test (protein goal=150, user will track 200)
     psql(`UPDATE users SET
       macros_enabled = '{"calories": true, "protein": true, "carbs": false, "fat": false, "fiber": false, "sugar": false, "auto_calc_calories": false}',
@@ -129,19 +130,10 @@ test.describe.serial('Macro Threshold', () => {
     await page.getByRole('button', { name: 'Track' }).click();
     await expect(page.getByText('Entry tracked')).toBeVisible({ timeout: 5000 });
 
-    // TodayPanel renders one glowing bar per macro (Dashboard/TodayPanel.tsx
-    // MacroBar): a wrapper div[role=img] with the accessible name, containing a
-    // fill div whose inline `background` is the status color (lib/ring.ts).
-    // target mode + total(200) >= goal(150) → macro-stat--success → green.
-    const proteinBar = page.getByRole('img', { name: /^Protein:/ }).first();
-    await expect(proteinBar).toBeVisible({ timeout: 10000 });
-    await expect(proteinBar).toHaveAttribute('aria-label', /^Protein: 200 \/ 150 g$/, { timeout: 10000 });
-
-    const proteinFill = proteinBar.locator('div[style*="background"]');
-    await expect(proteinFill).toBeVisible();
-    const fillColor = await proteinFill.evaluate((el) => getComputedStyle(el).backgroundColor);
-    expect(fillColor).not.toBe('rgb(239, 68, 68)'); // #ef4444 destructive
-    expect(fillColor).toBe('rgb(34, 197, 94)'); // #22c55e success
+    // The Today panel shows "eaten / goal g" per macro and no status colour:
+    // 200 g against a 150 g target is not painted red.
+    await expect(page.getByTestId('today-macro-protein')).toHaveText(/200 \/ 150 g/, { timeout: 10000 });
+    await expectNoWarningColors(page.getByRole('region', { name: 'Daily nutrition' }));
 
     await ctx.close();
   });

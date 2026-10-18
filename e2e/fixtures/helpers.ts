@@ -193,7 +193,8 @@ export function createIsolatedUser(specName: string, opts: { features?: boolean 
     DELETE FROM todos WHERE user_id = ${id};
     DELETE FROM daily_notes WHERE user_id = ${id};
     DELETE FROM ai_usage WHERE user_id = ${id};
-    DELETE FROM saved_foods WHERE user_id = ${id};`);
+    DELETE FROM saved_foods WHERE user_id = ${id};
+    DELETE FROM goal_adjustments WHERE user_id = ${id};`);
 
   if (features) {
     psql(`UPDATE users SET
