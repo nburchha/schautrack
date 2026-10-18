@@ -1219,7 +1219,7 @@ func paths() map[string]*PathItem {
 			Delete: &Operation{
 				OperationID: "deleteGoal", Summary: "Reset a date to the permanent goal",
 				Description: "Removes the day's adjustment. Answers 204 also when the date had none.",
-				Tags: []string{"Goals"}, Scope: service.ScopeGoalsWrite,
+				Tags:        []string{"Goals"}, Scope: service.ScopeGoalsWrite,
 				Security:   []SecurityRequirement{{"bearerAuth": {service.ScopeGoalsWrite}}},
 				Parameters: []Parameter{dateParam},
 				Responses: merge(map[string]*Response{

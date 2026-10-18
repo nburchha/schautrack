@@ -236,7 +236,7 @@ func SetDayGoal(ctx context.Context, pool *pgxpool.Pool, user *model.User, date 
 	}
 
 	vals := baseGoalValues(mu)
-	for i, p := range in.GoalValues.slots() {
+	for i, p := range in.slots() {
 		if *p != nil {
 			*vals.slots()[i] = *p
 		}
