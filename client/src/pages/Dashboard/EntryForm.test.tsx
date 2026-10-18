@@ -39,7 +39,6 @@ function renderForm(selectedDate = today, onSubmit = vi.fn()) {
         hasAiEnabled={false}
         aiUsage={null}
         aiProviderName={null}
-        barcodeEnabled
         onSubmit={onSubmit}
       />
     </QueryClientProvider>,
@@ -66,7 +65,7 @@ describe('EntryForm with catalog components', () => {
     vi.mocked(createEntry).mockReset();
     vi.mocked(createEntry).mockResolvedValue({ ok: true, id: 1 });
     vi.mocked(searchFoods).mockReset();
-    useAuthStore.setState({ user: { id: 1, timezone: TZ } as User });
+    useAuthStore.setState({ user: { id: 1, timezone: TZ } as User, barcodeEnabled: true });
   });
 
   it('builds a meal from searched foods and sends components, not sums', async () => {
@@ -208,5 +207,13 @@ describe('EntryForm time field', () => {
     expect(within(search).getByTestId('food-search-scan')).toBeInTheDocument();
     // One scanner, not a second one beside the photo and quick-add buttons.
     expect(screen.getAllByLabelText('Scan barcode')).toHaveLength(1);
+  });
+
+  // The server's enable_barcode switch reaches the form through the auth store
+  // (/api/me), the one place every food search reads it from.
+  it('offers no scanner when the server has barcode lookup switched off', () => {
+    useAuthStore.setState({ barcodeEnabled: false });
+    renderForm();
+    expect(screen.queryByTestId('food-search-scan')).not.toBeInTheDocument();
   });
 });

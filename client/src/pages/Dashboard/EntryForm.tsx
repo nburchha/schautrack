@@ -4,6 +4,7 @@ import { useQueryClient } from '@tanstack/react-query';
 import type { AIUsage } from '@/types';
 import { createEntry } from '@/api/entries';
 import { useAuth } from '@/hooks/useAuth';
+import { useAuthStore } from '@/stores/authStore';
 import { createSavedFood } from '@/api/savedFoods';
 import { MACRO_LABELS, computeCaloriesFromMacros } from '@/lib/macros';
 import { parseAmount } from '@/lib/mathParser';
@@ -30,7 +31,6 @@ interface Props {
   hasAiEnabled: boolean;
   aiUsage: AIUsage | null;
   aiProviderName: string | null;
-  barcodeEnabled: boolean;
   onSubmit: () => void;
 }
 
@@ -104,8 +104,9 @@ function DraftRow({ item, onGrams, onRemove }: {
   );
 }
 
-export default function EntryForm({ selectedDate, caloriesEnabled, autoCalcCalories, enabledMacros, hasAiEnabled, aiUsage, aiProviderName, barcodeEnabled, onSubmit }: Props) {
+export default function EntryForm({ selectedDate, caloriesEnabled, autoCalcCalories, enabledMacros, hasAiEnabled, aiUsage, aiProviderName, onSubmit }: Props) {
   const { t } = useTranslation('dashboard');
+  const barcodeEnabled = useAuthStore((s) => s.barcodeEnabled);
   const [name, setName] = useState('');
   const [amount, setAmount] = useState('');
   const [macros, setMacros] = useState<Record<string, string>>({});

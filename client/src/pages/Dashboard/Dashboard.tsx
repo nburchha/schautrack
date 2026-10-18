@@ -196,7 +196,6 @@ export default function Dashboard() {
               hasAiEnabled={dashboard.hasAiEnabled}
               aiUsage={dashboard.aiUsage}
               aiProviderName={dashboard.aiProviderName}
-              barcodeEnabled={dashboard.barcodeEnabled}
               onSubmit={() => {
                 setAddOpen(false);
                 // Refresh locally as well as via the entry-change SSE echo. The

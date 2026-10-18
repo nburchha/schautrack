@@ -6,6 +6,7 @@ import (
 	"testing"
 	"unicode/utf8"
 
+	"schautrack/internal/database"
 	"schautrack/internal/service"
 )
 
@@ -788,5 +789,26 @@ func TestClassifyAmountZeroIsNotAnError(t *testing.T) {
 		if got != want {
 			t.Errorf("classifyAmount(%q) = %+v, want %+v", raw, got, want)
 		}
+	}
+}
+
+// /api/me is the one place the SPA learns whether barcode lookup is on.
+func TestBarcodeEnabled(t *testing.T) {
+	tests := []struct {
+		name string
+		env  string
+		want bool
+	}{
+		{"unset defaults to on", "", true},
+		{"true", "true", true},
+		{"false switches it off", "false", false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Setenv("ENABLE_BARCODE", tt.env)
+			if got := barcodeEnabled(t.Context(), database.NewSettingsCache(nil)); got != tt.want {
+				t.Errorf("barcodeEnabled = %v, want %v", got, tt.want)
+			}
+		})
 	}
 }

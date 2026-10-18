@@ -198,7 +198,6 @@ export interface DashboardData {
   hasAiEnabled: boolean;
   aiUsage: AIUsage | null;
   aiProviderName: string | null;
-  barcodeEnabled: boolean;
   caloriesEnabled: boolean;
   autoCalcCalories: boolean;
   enabledMacros: string[];
