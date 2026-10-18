@@ -11,12 +11,15 @@ export const MACRO_LABELS: Record<MacroKey, { short: string; label: string }> = 
   sugar: { short: 'S', label: i18n.t('macros.sugar', { ns: 'common' }) },
 };
 
+/** Atwater factors: kcal per gram of each energy-giving macro. Fiber is left out on purpose. */
+export const KCAL_PER_GRAM = { protein: 4, carbs: 4, fat: 9 } as const;
+
 export function computeCaloriesFromMacros(protein: number, carbs: number, fat: number): number | null {
   const p = protein || 0;
   const c = carbs || 0;
   const f = fat || 0;
   if (p === 0 && c === 0 && f === 0) return null;
-  return p * 4 + c * 4 + f * 9;
+  return p * KCAL_PER_GRAM.protein + c * KCAL_PER_GRAM.carbs + f * KCAL_PER_GRAM.fat;
 }
 
 export function getEnabledMacros(macrosEnabled: Record<string, boolean>): MacroKey[] {

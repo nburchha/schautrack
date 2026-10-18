@@ -1,6 +1,6 @@
 import { useTranslation } from 'react-i18next';
 import type { DayGoal } from '@/types';
-import { MACRO_LABELS, type MacroKey } from '@/lib/macros';
+import { KCAL_PER_GRAM, MACRO_LABELS, type MacroKey } from '@/lib/macros';
 import { formatNumber } from '@/lib/format';
 import { cn } from '@/lib/utils';
 
@@ -18,8 +18,7 @@ interface Props {
   onEdit?: () => void;
 }
 
-// Energy per gram, for the stacked "where do my calories come from" bar.
-const KCAL_PER_GRAM = { protein: 4, carbs: 4, fat: 9 } as const;
+// Energy per gram (KCAL_PER_GRAM), for the stacked "where do my calories come from" bar.
 type EnergyKey = keyof typeof KCAL_PER_GRAM;
 const ENERGY_KEYS: EnergyKey[] = ['protein', 'carbs', 'fat'];
 
