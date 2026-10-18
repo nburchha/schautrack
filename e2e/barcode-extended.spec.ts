@@ -80,6 +80,8 @@ test.describe('Barcode Extended', () => {
 
     // Mock the barcode API AFTER page is loaded
     await page.route('**/api/barcode/*', (route) => {
+      // A lookup stores the product in the catalog, so the app sends a POST.
+      expect(route.request().method()).toBe('POST');
       route.fulfill({
         status: 200,
         contentType: 'application/json',

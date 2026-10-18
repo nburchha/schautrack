@@ -299,7 +299,7 @@ returns `401` when unauthenticated.
 | Method | Path | Auth | Description |
 |--------|------|------|-------------|
 | POST | `/api/ai/estimate` | Session (strict) | Estimate calories/macros from a food photo/description. **No CSRF header.** |
-| GET | `/api/barcode/{code}` | Session (barcode) | Look up a product by barcode (only when `ENABLE_BARCODE != false`). |
+| POST | `/api/barcode/{code}` | Session (barcode) +CSRF | Look up a product by barcode and store it in the catalog (only when `ENABLE_BARCODE != false`). |
 
 ### Settings & account
 

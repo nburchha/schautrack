@@ -10,6 +10,7 @@ import (
 	"unicode/utf8"
 
 	"github.com/go-chi/chi/v5"
+	"github.com/jackc/pgx/v5"
 
 	"schautrack/internal/config"
 )
@@ -38,7 +39,7 @@ func TestBarcode_InvalidFormat(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			r := httptest.NewRequest("GET", "/api/barcode/"+tt.code, nil)
+			r := httptest.NewRequest("POST", "/api/barcode/"+tt.code, nil)
 			r = withChiURLParam(r, "code", tt.code)
 			w := httptest.NewRecorder()
 
@@ -94,12 +95,29 @@ func offServer(t *testing.T, status int, body any) string {
 	return srv.URL
 }
 
+// emptyCatalog is a database with no stored products: every read finds no row,
+// and the cases that use it never get as far as storing one.
+type emptyCatalog struct{ querier }
+
+type noRow struct{}
+
+func (noRow) Scan(...any) error { return pgx.ErrNoRows }
+
+func (emptyCatalog) QueryRow(context.Context, string, ...any) pgx.Row { return noRow{} }
+
+// deadOffServer is an Open Food Facts that refuses connections.
+func deadOffServer(t *testing.T) string {
+	t.Helper()
+	srv := httptest.NewServer(http.NotFoundHandler())
+	srv.Close()
+	return srv.URL
+}
+
 func lookup(t *testing.T, base, code string) *httptest.ResponseRecorder {
 	t.Helper()
 	cfg := &config.Config{BuildVersion: "test", SupportEmail: "test@test.com"}
-	// The cases that use a nil database never get as far as storing a product.
-	h := barcodeHandler(cfg, nil, base)
-	r := withChiURLParam(httptest.NewRequest("GET", "/api/barcode/"+code, nil), "code", code)
+	h := barcodeHandler(cfg, emptyCatalog{}, base)
+	r := withChiURLParam(httptest.NewRequest("POST", "/api/barcode/"+code, nil), "code", code)
 	w := httptest.NewRecorder()
 	h(w, r)
 	return w
@@ -116,24 +134,49 @@ func TestBarcode_ProductNotFound(t *testing.T) {
 	}
 }
 
-func TestBarcode_UpstreamFailureIsBadGateway(t *testing.T) {
-	base := offServer(t, 503, map[string]any{})
-	if w := lookup(t, base, "5449000000996"); w.Code != http.StatusBadGateway {
-		t.Errorf("status = %d, want %d", w.Code, http.StatusBadGateway)
+// Without a stored product there is nothing to fall back on, so a failing Open
+// Food Facts stays the error it is.
+func TestBarcode_UpstreamFailureWithoutStoredProduct(t *testing.T) {
+	tests := []struct {
+		name string
+		base func(t *testing.T) string
+		want int
+	}{
+		{"non-200 is a bad gateway", func(t *testing.T) string { return offServer(t, 503, map[string]any{}) }, http.StatusBadGateway},
+		{"unreachable is a gateway timeout", deadOffServer, http.StatusGatewayTimeout},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if w := lookup(t, tt.base(t), "5449000000996"); w.Code != tt.want {
+				t.Errorf("status = %d, want %d", w.Code, tt.want)
+			}
+		})
 	}
 }
 
 // A product without a usable calorie value cannot be an entry component, so it
-// is reported as such and nothing is stored (the nil database would panic).
+// is reported as such and nothing is stored (emptyCatalog would panic on a write).
+// "No data" and "data nobody can believe" get different notes.
 func TestBarcode_NoCaloriesStoresNothing(t *testing.T) {
-	for name, nutriments := range map[string]map[string]any{
-		"absent":      {"proteins_100g": 3.0},
-		"implausible": {"energy-kcal_100g": 5000.0},
-		"negative":    {"energy-kcal_100g": -1.0},
-	} {
-		t.Run(name, func(t *testing.T) {
+	const absent = "No calorie data available for this product."
+	tests := []struct {
+		name       string
+		nutriments map[string]any
+		note       string
+	}{
+		{"absent", map[string]any{"proteins_100g": 3.0}, absent},
+		{"implausible", map[string]any{"energy-kcal_100g": 5000.0},
+			"Open Food Facts reports an implausible calorie value (5000 kcal per 100 g); it was not stored."},
+		{"fractional implausible", map[string]any{"energy-kcal_100g": 1234.5},
+			"Open Food Facts reports an implausible calorie value (1234.5 kcal per 100 g); it was not stored."},
+		{"negative", map[string]any{"energy-kcal_100g": -1.0},
+			"Open Food Facts reports an implausible calorie value (-1 kcal per 100 g); it was not stored."},
+		{"not a number", map[string]any{"energy-kcal_100g": "lots"}, absent},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
 			base := offServer(t, 200, map[string]any{"status": 1, "product": map[string]any{
-				"product_name": "Odd", "nutriments": nutriments,
+				"product_name": "Odd", "nutriments": tt.nutriments,
 			}})
 			w := lookup(t, base, "5449000000996")
 
@@ -141,6 +184,9 @@ func TestBarcode_NoCaloriesStoresNothing(t *testing.T) {
 			json.Unmarshal(w.Body.Bytes(), &resp)
 			if w.Code != http.StatusOK || resp["ok"] != true || resp["caloriesPer100g"] != nil || resp["food"] != nil {
 				t.Errorf("got %d %v, want ok with no calories and no food", w.Code, resp)
+			}
+			if resp["note"] != tt.note {
+				t.Errorf("note = %q, want %q", resp["note"], tt.note)
 			}
 		})
 	}
@@ -225,7 +271,7 @@ func TestBarcode_CheckDigitMismatch(t *testing.T) {
 	cfg := &config.Config{BuildVersion: "test", SupportEmail: "test@test.com"}
 	h := Barcode(cfg, nil)
 
-	r := httptest.NewRequest("GET", "/api/barcode/4311501062448", nil)
+	r := httptest.NewRequest("POST", "/api/barcode/4311501062448", nil)
 	r = withChiURLParam(r, "code", "4311501062448") // last digit flipped
 	w := httptest.NewRecorder()
 	h(w, r)
