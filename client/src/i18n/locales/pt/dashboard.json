@@ -351,6 +351,20 @@
   "store": {
     "you": "Você"
   },
+  "todayPanel": {
+    "adjusted": "ajustado",
+    "adjustedReason": "ajustado: {{reason}}",
+    "base": "Base {{calories}}",
+    "editGoal": "Ajustar a meta do dia",
+    "grams": "{{eaten}} g",
+    "gramsOfGoal": "{{eaten}} / {{goal}} g",
+    "kcalLeft": "faltam {{amount}} kcal",
+    "kcalOver": "{{amount}} kcal acima",
+    "ofGoal": "/ {{goal}} kcal",
+    "sourceBar": "Calorias por origem",
+    "sourceItem": "{{macro}} {{kcal}} kcal",
+    "title": "Nutrição do dia"
+  },
   "todos": {
     "sectionTitle": "Tarefas",
     "progressCount": "{{completed}}/{{total}}",

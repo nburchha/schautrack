@@ -351,6 +351,20 @@
   "store": {
     "you": "Tu"
   },
+  "todayPanel": {
+    "adjusted": "modificato",
+    "adjustedReason": "modificato: {{reason}}",
+    "base": "Base {{calories}}",
+    "editGoal": "Modifica l'obiettivo del giorno",
+    "grams": "{{eaten}} g",
+    "gramsOfGoal": "{{eaten}} / {{goal}} g",
+    "kcalLeft": "{{amount}} kcal rimaste",
+    "kcalOver": "{{amount}} kcal in più",
+    "ofGoal": "/ {{goal}} kcal",
+    "sourceBar": "Calorie per fonte",
+    "sourceItem": "{{macro}} {{kcal}} kcal",
+    "title": "Nutrizione del giorno"
+  },
   "todos": {
     "sectionTitle": "Cose da fare",
     "progressCount": "{{completed}}/{{total}}",

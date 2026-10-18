@@ -351,6 +351,20 @@
   "store": {
     "you": "Jij"
   },
+  "todayPanel": {
+    "adjusted": "aangepast",
+    "adjustedReason": "aangepast: {{reason}}",
+    "base": "Basis {{calories}}",
+    "editGoal": "Dagdoel aanpassen",
+    "grams": "{{eaten}} g",
+    "gramsOfGoal": "{{eaten}} / {{goal}} g",
+    "kcalLeft": "nog {{amount}} kcal",
+    "kcalOver": "{{amount}} kcal erover",
+    "ofGoal": "/ {{goal}} kcal",
+    "sourceBar": "Calorieën per bron",
+    "sourceItem": "{{macro}} {{kcal}} kcal",
+    "title": "Voeding van de dag"
+  },
   "todos": {
     "sectionTitle": "Taken",
     "progressCount": "{{completed}}/{{total}}",

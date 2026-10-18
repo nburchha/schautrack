@@ -351,6 +351,20 @@
   "store": {
     "you": "Du"
   },
+  "todayPanel": {
+    "adjusted": "angepasst",
+    "adjustedReason": "angepasst: {{reason}}",
+    "base": "Basis {{calories}}",
+    "editGoal": "Tagesziel anpassen",
+    "grams": "{{eaten}} g",
+    "gramsOfGoal": "{{eaten}} / {{goal}} g",
+    "kcalLeft": "noch {{amount}} kcal",
+    "kcalOver": "{{amount}} kcal drüber",
+    "ofGoal": "/ {{goal}} kcal",
+    "sourceBar": "Kalorien nach Quelle",
+    "sourceItem": "{{macro}} {{kcal}} kcal",
+    "title": "Tagesübersicht Ernährung"
+  },
   "todos": {
     "sectionTitle": "Todos",
     "progressCount": "{{completed}}/{{total}}",

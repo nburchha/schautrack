@@ -209,6 +209,34 @@ export interface DashboardData {
   calorieStatus: MacroStatus;
 }
 
+/**
+ * The Tagesziel of one date for the viewed account, as returned in the `goal`
+ * block of GET /entries/day. It describes the account whose day is shown (also
+ * for a linked account), so consumers never need the viewer's own settings.
+ */
+export interface DayGoal {
+  date: string;
+  adjusted: boolean;
+  reason: string | null;
+  /** Calorie goal of the Tagesziel; null = no goal. */
+  calories: number | null;
+  /** The Basisziel's calories; only set on an adjusted day. */
+  baseCalories: number | null;
+  /** Goal in grams for each enabled macro that has one. Missing key = no goal. */
+  macroGoals: Record<string, number>;
+  enabledMacros: string[];
+  macroModes: Record<string, string>;
+  goalThreshold: number;
+  caloriesEnabled: boolean;
+}
+
+export interface DayEntriesResponse {
+  ok: boolean;
+  date: string;
+  entries: Entry[];
+  goal: DayGoal;
+}
+
 export interface LinkRequest {
   id: number;
   email: string;

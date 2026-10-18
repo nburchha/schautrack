@@ -49,7 +49,7 @@ Items marked [A] are covered by automated E2E tests (`npm run test:e2e`).
 - [x] [A] Set goal threshold percentage, verify over-threshold turns red
 - [x] [A] Enable auto-calc calories (requires protein + carbs + fat), verify calorie field is read-only and computed
 - [x] [A] Add entry with macro values, verify they display correctly
-- [x] [A] Verify macro totals for the day (TodayPanel chips with progress bars)
+- [x] [A] Verify macro totals for the day (Today panel: kcal header, stacked source bar, eaten / goal per macro, fiber bar)
 - [x] [A] Macro columns visible in entry list when enabled
 - [x] [A] Verify macro status colors (green/yellow/red) match target vs limit modes
 

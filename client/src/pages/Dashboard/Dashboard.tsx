@@ -5,7 +5,6 @@ import { useRequireAuth } from '@/hooks/useAuth';
 import { getDashboard, getDayEntries } from '@/api/entries';
 import { getWeightDay } from '@/api/weight';
 import { useDashboardStore } from '@/stores/dashboardStore';
-import { computeMacroStatus } from '@/lib/macros';
 import { formatDate } from '@/lib/format';
 import { QueryError } from '@/components/ui/QueryError';
 import { SectionLabel } from '@/components/ui/SectionLabel';
@@ -72,18 +71,16 @@ export default function Dashboard() {
     placeholderData: keepPreviousData,
   });
 
-  // Compute selected day's totals from entries
-  // eslint-disable-next-line react-hooks/preserve-manual-memoization -- deps are optional-chained subpaths, finer-grained than the compiler can verify
-  const selectedTotal = useMemo(() => {
-    if (!dayData?.entries) return dashboard?.todayTotal ?? 0;
-    return dayData.entries.reduce((sum, e) => sum + (e.amount || 0), 0);
-  }, [dayData?.entries, dashboard?.todayTotal]);
+  // Totals of the selected day come from the same response as its goal, so the
+  // panel never pairs one day's entries with another day's Tagesziel.
+  const selectedTotal = useMemo(
+    () => (dayData?.entries ?? []).reduce((sum, e) => sum + (e.amount || 0), 0),
+    [dayData?.entries],
+  );
 
-  // eslint-disable-next-line react-hooks/preserve-manual-memoization -- same: optional-chained deps
   const selectedMacroTotals = useMemo(() => {
-    if (!dayData?.entries) return dashboard?.todayMacroTotals ?? {};
     const totals: Record<string, number> = {};
-    for (const e of dayData.entries) {
+    for (const e of dayData?.entries ?? []) {
       if (e.macros) {
         for (const [key, val] of Object.entries(e.macros)) {
           if (val != null) totals[key] = (totals[key] || 0) + val;
@@ -91,23 +88,7 @@ export default function Dashboard() {
       }
     }
     return totals;
-  }, [dayData?.entries, dashboard?.todayMacroTotals]);
-
-  const selectedCalorieStatus = useMemo(() => {
-    if (!dashboard) return { statusClass: '', statusText: '' };
-    return computeMacroStatus(selectedTotal, dashboard.dailyGoal, dashboard.macroModes?.calories || 'limit', dashboard.user.goalThreshold);
-  }, [selectedTotal, dashboard]);
-
-  const selectedMacroStatuses = useMemo(() => {
-    if (!dashboard) return {};
-    const statuses: Record<string, { statusClass: string; statusText: string }> = {};
-    for (const key of dashboard.enabledMacros) {
-      const total = selectedMacroTotals[key] || 0;
-      const goal = dashboard.macroGoals[key] ?? null;
-      statuses[key] = computeMacroStatus(total, goal, dashboard.macroModes?.[key] || 'limit', dashboard.user.goalThreshold);
-    }
-    return statuses;
-  }, [selectedMacroTotals, dashboard]);
+  }, [dayData?.entries]);
 
   if (isError && !dashboard) {
     return <QueryError error={error} onRetry={() => refetch()} retrying={isFetching} />;
@@ -163,19 +144,11 @@ export default function Dashboard() {
         </div>
       </header>
 
-      {showCat('nutrition') && (
+      {showCat('nutrition') && dayData?.goal && (
         <TodayPanel
-          dailyGoal={dashboard.dailyGoal}
-          todayTotal={selectedTotal}
-          caloriesEnabled={dashboard.caloriesEnabled}
-          calorieStatus={selectedCalorieStatus}
-          enabledMacros={dashboard.enabledMacros}
-          macroGoals={dashboard.macroGoals}
-          todayMacroTotals={selectedMacroTotals}
-          macroStatuses={selectedMacroStatuses}
-          macroModes={dashboard.macroModes}
-          selectedDate={selectedDate}
-          todayStr={dashboard.todayStr}
+          goal={dayData.goal}
+          eatenCalories={selectedTotal}
+          macroTotals={selectedMacroTotals}
         />
       )}
 

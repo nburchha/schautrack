@@ -1,5 +1,5 @@
 import { api } from './client';
-import type { DashboardData, Entry, EntryDetail } from '@/types';
+import type { DashboardData, DayEntriesResponse, Entry, EntryDetail } from '@/types';
 
 export function getDashboard(params: { range?: number; start?: string; end?: string; day?: string }) {
   const qs = new URLSearchParams();
@@ -11,7 +11,7 @@ export function getDashboard(params: { range?: number; start?: string; end?: str
 }
 
 export function getDayEntries(userId: number, date: string) {
-  return api<{ ok: boolean; date: string; entries: Entry[] }>(`/entries/day?date=${date}&user=${userId}`, {
+  return api<DayEntriesResponse>(`/entries/day?date=${date}&user=${userId}`, {
     headers: { Accept: 'application/json' },
   });
 }

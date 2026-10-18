@@ -351,6 +351,20 @@
   "store": {
     "you": "You"
   },
+  "todayPanel": {
+    "adjusted": "adjusted",
+    "adjustedReason": "adjusted: {{reason}}",
+    "base": "Base {{calories}}",
+    "editGoal": "Adjust goal for this day",
+    "grams": "{{eaten}} g",
+    "gramsOfGoal": "{{eaten}} / {{goal}} g",
+    "kcalLeft": "{{amount}} kcal left",
+    "kcalOver": "{{amount}} kcal over",
+    "ofGoal": "/ {{goal}} kcal",
+    "sourceBar": "Calories by source",
+    "sourceItem": "{{macro}} {{kcal}} kcal",
+    "title": "Daily nutrition"
+  },
   "todos": {
     "addButton": "Add",
     "addTodoButton": "Add a todo",

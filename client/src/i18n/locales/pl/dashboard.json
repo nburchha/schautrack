@@ -365,6 +365,20 @@
   "store": {
     "you": "Ty"
   },
+  "todayPanel": {
+    "adjusted": "zmieniony",
+    "adjustedReason": "zmieniony: {{reason}}",
+    "base": "Baza {{calories}}",
+    "editGoal": "Zmień cel na ten dzień",
+    "grams": "{{eaten}} g",
+    "gramsOfGoal": "{{eaten}} / {{goal}} g",
+    "kcalLeft": "zostało {{amount}} kcal",
+    "kcalOver": "{{amount}} kcal ponad",
+    "ofGoal": "/ {{goal}} kcal",
+    "sourceBar": "Kalorie według źródła",
+    "sourceItem": "{{macro}} {{kcal}} kcal",
+    "title": "Odżywianie dnia"
+  },
   "todos": {
     "sectionTitle": "Zadania",
     "progressCount": "{{completed}}/{{total}}",
