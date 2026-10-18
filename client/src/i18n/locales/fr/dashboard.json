@@ -134,6 +134,22 @@
       "own": "Perso"
     }
   },
+  "goalAdjust": {
+    "caloriesAuto": "Calculées à partir de vos macros",
+    "caloriesLabel": "Calories (kcal)",
+    "cancel": "Annuler",
+    "kcal": "{{amount}} kcal",
+    "macroLabel": "{{macro}} (g)",
+    "noReason": "Aucun motif",
+    "reasonLabel": "Motif (facultatif)",
+    "reasonPlaceholder": "p. ex. Longue course",
+    "recentTitle": "Ajustements récents",
+    "reset": "Revenir à l'objectif de base",
+    "resetFailed": "Impossible de réinitialiser l'objectif.",
+    "save": "Enregistrer",
+    "saveFailed": "Impossible d'enregistrer l'objectif.",
+    "title": "Ajuster l'objectif de ce jour"
+  },
   "meal": {
     "addPage": {
       "back": "Retour au repas",
