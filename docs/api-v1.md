@@ -129,6 +129,8 @@ than retrying blindly.
 | `foods:write` | Create, update, and delete saved foods. |
 | `notes:read` | Read daily notes. |
 | `notes:write` | Write daily notes. |
+| `goals:read` | Read the goal that applies to a date, including per-date adjustments. |
+| `goals:write` | Set and reset per-date goal adjustments. |
 | `plan:read` | Read the weight-loss plan, its goal, and its projections. |
 | `links:read` | Read data that linked accounts have shared with you. |
 | `settings:read` | Read account settings (goal, timezone, units, language). |
@@ -160,6 +162,9 @@ than retrying blindly.
 | [`GET /weight/{date}`](#getweight) | `weight:read` | Fetch one day's weight |
 | [`PUT /weight/{date}`](#putweight) | `weight:write` | Record a day's weight |
 | [`DELETE /weight/{date}`](#deleteweight) | `weight:write` | Delete a day's weight |
+| [`GET /goals/{date}`](#getgoal) | `goals:read` | Fetch the goal for a date |
+| [`PUT /goals/{date}`](#putgoal) | `goals:write` | Adjust the goal for a date |
+| [`DELETE /goals/{date}`](#deletegoal) | `goals:write` | Reset a date to the permanent goal |
 | [`GET /todos`](#listtodos) | `todos:read` | List todo definitions |
 | [`POST /todos`](#createtodo) | `todos:write` | Create a todo |
 | [`GET /todos/day/{date}`](#listtodosforday) | `todos:read` | Todos due on a date |
@@ -552,6 +557,84 @@ DELETE /api/v1/weight/{date}
 | `401` | [`Problem`](#problem) — No token, or the token is unknown, revoked, or expired. |
 | `403` | [`Problem`](#problem) — The token is valid but lacks the scope this endpoint requires. The `required_scope` field names it. |
 | `404` | [`Problem`](#problem) — No such resource, or it belongs to another account. |
+| `429` | [`Problem`](#problem) — Too many requests. The `Retry-After` header gives the number of seconds until the window reopens. |
+| `500` | [`Problem`](#problem) — An unexpected server-side failure. |
+
+## Goals
+
+The goal that applies on a date, with per-date adjustments.
+
+### Fetch the goal for a date
+
+```http
+GET /api/v1/goals/{date}
+```
+
+**Scope:** `goals:read`
+
+The goal that applies on the date: the day's adjustment when it has one, otherwise the permanent goal. Always answers 200, also for an account that has no goal at all (every number is then `null`). An adjusted day also reports the permanent goal it differs from in `base`.
+
+| Parameter | In | Required | Description |
+| --- | --- | --- | --- |
+| `date` | path | yes | A calendar date in the account's time zone. |
+
+| Status | Response |
+| --- | --- |
+| `200` | [`Goal`](#goal) — The goal for the date. |
+| `400` | [`Problem`](#problem) — The request is malformed — unparseable JSON, an unknown field, or a bad query parameter. |
+| `401` | [`Problem`](#problem) — No token, or the token is unknown, revoked, or expired. |
+| `403` | [`Problem`](#problem) — The token is valid but lacks the scope this endpoint requires. The `required_scope` field names it. |
+| `429` | [`Problem`](#problem) — Too many requests. The `Retry-After` header gives the number of seconds until the window reopens. |
+| `500` | [`Problem`](#problem) — An unexpected server-side failure. |
+
+### Adjust the goal for a date
+
+```http
+PUT /api/v1/goals/{date}
+```
+
+**Scope:** `goals:write`
+
+Replaces the day's adjustment with a complete snapshot. Send only what differs; every number you leave out is filled from the permanent goal as it is now (never from a previous adjustment). Any date is allowed, past or future. Idempotent: repeating the request yields the same state. Returns 201 the first time a date is adjusted and 200 thereafter, with the resulting goal. A number that is out of range, a macro the account does not track, or `calories` on an account that hides calories is a 422 naming the field.
+
+| Parameter | In | Required | Description |
+| --- | --- | --- | --- |
+| `date` | path | yes | A calendar date in the account's time zone. |
+
+**Request body** (required): [`GoalInput`](#goalinput)
+
+| Status | Response |
+| --- | --- |
+| `200` | [`Goal`](#goal) — The adjustment was replaced. |
+| `201` | [`Goal`](#goal) — The date was adjusted. |
+| `400` | [`Problem`](#problem) — The request is malformed — unparseable JSON, an unknown field, or a bad query parameter. |
+| `401` | [`Problem`](#problem) — No token, or the token is unknown, revoked, or expired. |
+| `403` | [`Problem`](#problem) — The token is valid but lacks the scope this endpoint requires. The `required_scope` field names it. |
+| `413` | [`Problem`](#problem) — The request body exceeds the 1 MB limit. Attached to every operation that takes a body — the cap is enforced in the decoder, not per endpoint. |
+| `422` | [`Problem`](#problem) — The request is well-formed but its values are rejected. `invalid_params` lists the offending fields. |
+| `429` | [`Problem`](#problem) — Too many requests. The `Retry-After` header gives the number of seconds until the window reopens. |
+| `500` | [`Problem`](#problem) — An unexpected server-side failure. |
+
+### Reset a date to the permanent goal
+
+```http
+DELETE /api/v1/goals/{date}
+```
+
+**Scope:** `goals:write`
+
+Removes the day's adjustment. Answers 204 also when the date had none.
+
+| Parameter | In | Required | Description |
+| --- | --- | --- | --- |
+| `date` | path | yes | A calendar date in the account's time zone. |
+
+| Status | Response |
+| --- | --- |
+| `204` | Deleted. No body. |
+| `400` | [`Problem`](#problem) — The request is malformed — unparseable JSON, an unknown field, or a bad query parameter. |
+| `401` | [`Problem`](#problem) — No token, or the token is unknown, revoked, or expired. |
+| `403` | [`Problem`](#problem) — The token is valid but lacks the scope this endpoint requires. The `required_scope` field names it. |
 | `429` | [`Problem`](#problem) — Too many requests. The `Retry-After` header gives the number of seconds until the window reopens. |
 | `500` | [`Problem`](#problem) — An unexpected server-side failure. |
 
@@ -1327,6 +1410,51 @@ Macronutrients in grams per 100 g. `null` means unknown, which is distinct from 
 | `fiber_g` | `number` or `null` | yes | Fibre, grams. |
 | `protein_g` | `number` or `null` | yes | Protein, grams. |
 | `sugar_g` | `number` or `null` | yes | Sugar, grams. |
+
+### Goal
+
+The goal that applies on one date (the Tagesziel): the day's adjustment when there is one, otherwise the permanent goal. Only calories and macros the account tracks are reported; everything else is `null`, as is any value with no goal set.
+
+| Field | Type | Required | Description |
+| --- | --- | --- | --- |
+| `adjusted` | `boolean` | yes | Whether the day has its own adjustment. `false` means the values are the permanent goal. |
+| `base` | [`GoalValues`](#goalvalues) or `null` | yes | The permanent goal the adjusted day differs from, as it is now. `null` unless `adjusted`. |
+| `calories` | `integer` or `null` | yes | Calorie goal. |
+| `carbs` | `integer` or `null` | yes | Carbohydrate goal in grams. |
+| `date` | `string` (date) | yes | The day this goal applies to. |
+| `fat` | `integer` or `null` | yes | Fat goal in grams. |
+| `fiber` | `integer` or `null` | yes | Fiber goal in grams. |
+| `protein` | `integer` or `null` | yes | Protein goal in grams. |
+| `reason` | `string` or `null` | yes | Why the day is adjusted. `null` when unadjusted or no reason was given. |
+| `sugar` | `integer` or `null` | yes | Sugar goal in grams. |
+| `updated_at` | `string` or `null` | yes | When the adjustment was last written (UTC). `null` when unadjusted. |
+
+### GoalInput
+
+An adjustment for one date. Send only what differs: every number you leave out is filled from the permanent goal as it is at the moment of the request, and is then frozen — a later change to the permanent goal does not touch an adjusted day. At least one field is required.
+
+| Field | Type | Required | Description |
+| --- | --- | --- | --- |
+| `calories` | `integer` |  | Calorie goal. Rejected when the account hides calories. |
+| `carbs` | `integer` |  | Carbohydrate goal in grams. 0 means no goal. Rejected when the macro is not enabled. |
+| `fat` | `integer` |  | Fat goal in grams. 0 means no goal. Rejected when the macro is not enabled. |
+| `fiber` | `integer` |  | Fiber goal in grams. 0 means no goal. Rejected when the macro is not enabled. |
+| `protein` | `integer` |  | Protein goal in grams. 0 means no goal. Rejected when the macro is not enabled. |
+| `reason` | `string` |  | Why the day differs, e.g. `Lauf 25 km`. Trimmed; empty is stored as no reason. |
+| `sugar` | `integer` |  | Sugar goal in grams. 0 means no goal. Rejected when the macro is not enabled. |
+
+### GoalValues
+
+A goal: calories and the five macros. `null` where no goal is set or the account does not track it.
+
+| Field | Type | Required | Description |
+| --- | --- | --- | --- |
+| `calories` | `integer` or `null` | yes | Calorie goal. |
+| `carbs` | `integer` or `null` | yes | Carbohydrate goal in grams. |
+| `fat` | `integer` or `null` | yes | Fat goal in grams. |
+| `fiber` | `integer` or `null` | yes | Fiber goal in grams. |
+| `protein` | `integer` or `null` | yes | Protein goal in grams. |
+| `sugar` | `integer` or `null` | yes | Sugar goal in grams. |
 
 ### HealthyRange
 

@@ -35,6 +35,8 @@ const (
 	ScopeFoodsWrite    = "foods:write"
 	ScopeNotesRead     = "notes:read"
 	ScopeNotesWrite    = "notes:write"
+	ScopeGoalsRead     = "goals:read"
+	ScopeGoalsWrite    = "goals:write"
 	ScopePlanRead      = "plan:read"
 	ScopeLinksRead     = "links:read"
 	ScopeSettingsRead  = "settings:read"
@@ -64,6 +66,8 @@ var ScopeDescriptions = []struct{ Scope, Description string }{
 	{ScopeFoodsWrite, "Create, update, and delete saved foods."},
 	{ScopeNotesRead, "Read daily notes."},
 	{ScopeNotesWrite, "Write daily notes."},
+	{ScopeGoalsRead, "Read the goal that applies to a date, including per-date adjustments."},
+	{ScopeGoalsWrite, "Set and reset per-date goal adjustments."},
 	{ScopePlanRead, "Read the weight-loss plan, its goal, and its projections."},
 	{ScopeLinksRead, "Read data that linked accounts have shared with you."},
 	{ScopeSettingsRead, "Read account settings (goal, timezone, units, language)."},

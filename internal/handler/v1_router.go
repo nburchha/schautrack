@@ -170,6 +170,12 @@ func (h *V1Handler) MountAPIV1(pool *pgxpool.Pool) chi.Router {
 		// weight per user per day (enforced by a unique index), so the date IS
 		// the natural key. That makes PUT genuinely idempotent — "my scale says
 		// 82.4 today" is the same statement however many times it is sent.
+		r.Route("/goals", func(r chi.Router) {
+			r.With(middleware.RequireScope(service.ScopeGoalsRead)).Get("/{date}", h.GetGoalV1)
+			r.With(middleware.RequireScope(service.ScopeGoalsWrite)).Put("/{date}", h.PutGoalV1)
+			r.With(middleware.RequireScope(service.ScopeGoalsWrite)).Delete("/{date}", h.DeleteGoalV1)
+		})
+
 		r.Route("/weight", func(r chi.Router) {
 			r.With(middleware.RequireScope(service.ScopeWeightRead)).Get("/", h.ListWeight)
 			r.With(middleware.RequireScope(service.ScopeWeightRead)).Get("/{date}", h.GetWeightV1)

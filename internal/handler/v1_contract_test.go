@@ -98,6 +98,20 @@ func TestEntryListLastPageMatchesSchema(t *testing.T) {
 	checkSchema(t, "EntryList", v1List[v1Entry]{Data: []v1Entry{}, HasMore: &hasMore})
 }
 
+func TestGoalMatchesSchema(t *testing.T) {
+	n := func(v int) *int { return &v }
+	reason := "Lauf 25 km"
+	// Unadjusted, with nothing set at all: every number null, base null.
+	checkSchema(t, "Goal", v1Goal{Date: "2026-08-05"})
+	// Adjusted: reason, base and updated_at present.
+	checkSchema(t, "Goal", v1Goal{
+		Date: "2026-08-05", Adjusted: true, Reason: &reason,
+		v1GoalValues: v1GoalValues{Calories: n(3100), Protein: n(150), Carbs: n(480), Fat: n(70), Fiber: n(30), Sugar: n(50)},
+		Base:         &v1GoalValues{Calories: n(2400)},
+		UpdatedAt:    &fixedTime,
+	})
+}
+
 func TestWeightMatchesSchema(t *testing.T) {
 	checkSchema(t, "Weight", v1Weight{
 		Date: "2026-08-05", Weight: 82.4, Unit: "kg",
