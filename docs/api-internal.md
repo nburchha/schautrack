@@ -262,6 +262,18 @@ returns `401` when unauthenticated.
 | POST | `/weight/{id}/delete` | Session +CSRF | Delete a weight entry. |
 | POST | `/weight/toggle-body-fat` | Session +CSRF | Enable/disable the body-fat field for the current user. |
 
+### Daily goals (Tagesziel-Anpassung)
+
+Self only: none of these takes a user parameter, and none honours link sharing.
+Both writes broadcast an `entry-change` event to the user and linked accounts.
+Not in the OpenAPI document; the bearer-token twin is `/api/v1/goals/{date}`.
+
+| Method | Path | Auth | Description |
+|--------|------|------|-------------|
+| PUT | `/api/goals/{date}` | Session +CSRF | Set the adjustment for a date (thin body, gaps filled from the Basisziel). |
+| POST | `/api/goals/{date}/reset` | Session +CSRF | Remove the adjustment; idempotent. |
+| GET | `/api/goals/recent` | Session | Latest distinct adjustments for the sheet's quick picks. |
+
 ### Todos
 
 | Method | Path | Auth | Description |
@@ -504,6 +516,79 @@ one of the two must be present.
 `400 { "ok": false, "error": "Log a weight for that date first" }` when the
 request carries no `weight` and the date has no entry yet — there is nothing to
 attach a body-fat reading to. `400 "Nothing to save"` when both keys are absent.
+
+### `PUT /api/goals/{date}`
+
+`{date}` is `YYYY-MM-DD`; any date, past or future.
+
+```json
+{ "calories": 3100, "carbs": 480, "reason": "Lauf 25 km" }
+```
+
+Every key is optional but at least one must be present. Missing values are
+filled from the current Basisziel at save time; the stored row is always a
+complete snapshot, and a later Basisziel change does not touch it. Replacing is
+a full replace (gaps come from the Basisziel again, never from the previous
+adjustment), so repeating a request is harmless. `calories` is `1..9999`,
+macros `0..9999` (0 = no goal), macros must be enabled for the account,
+`reason` is trimmed and at most 120 characters (empty = none). Same rules and
+service function as v1.
+
+→ `200`:
+
+```json
+{
+  "ok": true,
+  "goal": {
+    "date": "2026-08-05",
+    "adjusted": true,
+    "reason": "Lauf 25 km",
+    "calories": 3100, "protein": 150, "carbs": 480, "fat": 70, "fiber": 30, "sugar": 50,
+    "base": { "calories": 2400, "protein": 150, "carbs": 300, "fat": 70, "fiber": 30, "sugar": 50 },
+    "updated_at": "2026-08-04T18:21:07.123456Z"
+  }
+}
+```
+
+Value keys are `null` where there is no goal or the macro is disabled. `base`
+is the Basisziel the day differs from. `400 { "ok": false, "error": "carbs: …" }`
+for validation (the field is named at the start of the message),
+`"Invalid date"` for a bad date, `"Invalid request."` for a malformed body.
+
+### `POST /api/goals/{date}/reset`
+
+No body. Removes the date's adjustment; resetting a day that has none is not an
+error. → `200` with the Tagesziel now in force:
+
+```json
+{
+  "ok": true,
+  "goal": {
+    "date": "2026-08-05", "adjusted": false, "reason": null,
+    "calories": 2400, "protein": 150, "carbs": 300, "fat": 70, "fiber": 30, "sugar": 50,
+    "base": null, "updated_at": null
+  }
+}
+```
+
+### `GET /api/goals/recent`
+
+Up to 8 distinct adjustments (same reason and values, whatever date they were
+for), most recently written first. Values of macros the account does not track
+are `null`.
+
+```json
+{
+  "ok": true,
+  "recent": [
+    {
+      "reason": "Lauf 25 km",
+      "calories": 3100, "protein": 150, "carbs": 480, "fat": 70, "fiber": 30, "sugar": 50,
+      "used_at": "2026-08-04T18:21:07.123456Z"
+    }
+  ]
+}
+```
 
 ---
 
