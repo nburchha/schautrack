@@ -184,9 +184,58 @@ func getTotalsAndMacrosByDate(ctx context.Context, pool *pgxpool.Pool, userID in
 	return totals, macros, nil
 }
 
-func buildDailyStats(dayOptions []string, totalsByDate map[string]int, dailyGoal *int, enabledMacros []string, macroGoals map[string]int, macroModes map[string]string, macroTotalsByDate map[string]map[string]int, threshold int) []dailyStat {
+// dayGoalPayload is the `goal` block of GET /entries/day: the Tagesziel of one
+// date of one account together with the settings that give its numbers meaning.
+// Session-surface JSON (camelCase); additive only, see docs/api-internal.md.
+type dayGoalPayload struct {
+	Date     string  `json:"date"`
+	Adjusted bool    `json:"adjusted"`
+	Reason   *string `json:"reason"`
+	// Calories is the Tagesziel's calorie goal; nil when none is set.
+	Calories *int `json:"calories"`
+	// BaseCalories is the Basisziel's calories on an adjusted day, else nil.
+	BaseCalories *int `json:"baseCalories"`
+	// MacroGoals holds enabled macros that have a goal, like the dashboard's macroGoals.
+	MacroGoals      map[string]int    `json:"macroGoals"`
+	EnabledMacros   []string          `json:"enabledMacros"`
+	MacroModes      map[string]string `json:"macroModes"`
+	GoalThreshold   int               `json:"goalThreshold"`
+	CaloriesEnabled bool              `json:"caloriesEnabled"`
+}
+
+func newDayGoalPayload(mu service.MacroUser, dg *service.DayGoal) dayGoalPayload {
+	p := dayGoalPayload{
+		Date: dg.Date, Adjusted: dg.Adjusted, Reason: dg.Reason,
+		Calories:        dg.Calories,
+		MacroGoals:      dg.MacroMap(),
+		EnabledMacros:   service.GetEnabledMacros(mu),
+		MacroModes:      service.GetMacroModes(mu),
+		GoalThreshold:   mu.GoalThreshold,
+		CaloriesEnabled: true,
+	}
+	if v, ok := mu.MacrosEnabled["calories"]; ok && v == false {
+		p.CaloriesEnabled = false
+	}
+	if dg.Adjusted && dg.Base != nil {
+		p.BaseCalories = dg.Base.Calories
+	}
+	return p
+}
+
+// goalSpan widens [oldest, newest] to include today, so one range query yields
+// both the days' goals and today's.
+func goalSpan(oldest, newest, today string) (string, string) {
+	return min(oldest, today), max(newest, today)
+}
+
+// buildDailyStats computes each day's dot against that date's Tagesziel:
+// goalOn returns the resolved goal values of a date (service.DayGoals.ValuesOn).
+func buildDailyStats(dayOptions []string, totalsByDate map[string]int, goalOn func(date string) service.GoalValues, enabledMacros []string, macroModes map[string]string, macroTotalsByDate map[string]map[string]int, threshold int) []dailyStat {
 	stats := make([]dailyStat, 0, len(dayOptions))
 	for _, dateStr := range dayOptions {
+		dayGoal := goalOn(dateStr)
+		dailyGoal := dayGoal.Calories
+		macroGoals := dayGoal.MacroMap()
 		total := totalsByDate[dateStr]
 		_, hasEntries := totalsByDate[dateStr]
 		var statuses []string

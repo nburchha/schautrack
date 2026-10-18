@@ -245,9 +245,9 @@ returns `401` when unauthenticated.
 
 | Method | Path | Auth | Description |
 |--------|------|------|-------------|
-| GET | `/api/dashboard` | Session | Dashboard data for the current user. |
-| GET | `/overview` | Session, link-aware | Overview/aggregate view. |
-| GET | `/entries/day` | Session, link-aware | Calorie entries for a given day. |
+| GET | `/api/dashboard` | Session | Dashboard data for the current user. Day dots and the today-based goal fields are resolved against each date's Tagesziel (see [Goals per date](#goals-per-date-tagesziel)). |
+| GET | `/overview` | Session, link-aware | Overview/aggregate view; same per-date goal resolution as the dashboard. |
+| GET | `/entries/day` | Session, link-aware | Calorie entries for a given day, plus a `goal` block with the target account's Tagesziel for that date. |
 | POST | `/entries` | Session +CSRF | Create a calorie / macro / weight entry. |
 | POST | `/entries/{id}/update` | Session +CSRF | Update an entry. |
 | POST | `/entries/{id}/delete` | Session +CSRF | Delete an entry. |
@@ -443,6 +443,75 @@ when SMTP is configured. `409` if the account already exists.
 ### `POST /api/auth/logout`
 
 No body. Requires `X-CSRF-Token`. → `200 { "ok": true }` and clears the cookie.
+
+### Goals per date (Tagesziel)
+
+The **Basisziel** is the permanent goal (`users.macro_goals`); a
+**Tagesziel-Anpassung** replaces it for one date. The **Tagesziel** of a date is
+its adjustment if one exists, otherwise the Basisziel. Everything below resolves
+goals through that rule (`service.ResolveDayGoal` / `ResolveDayGoalRange`).
+Changes are additive: no existing field was renamed or removed.
+
+Unchanged and always the Basisziel: `GET /api/me`, `GET /api/settings`,
+`GET /api/plan`, and `user.dailyGoal` / `user.macroGoals` inside the dashboard
+payload.
+
+#### `GET /entries/day?date=YYYY-MM-DD[&user=ID]` — new `goal` block
+
+`user` needs the nutrition share (`RequireLinkAuth`), so a friend's `goal` is
+only ever returned when they share nutrition (otherwise `403 {"ok":false,…}`
+with no goal data). The block always describes the **target** account, never the
+viewer: its macros, modes, threshold and adjustments.
+
+```json
+{
+  "ok": true,
+  "date": "2026-08-05",
+  "entries": [],
+  "goal": {
+    "date": "2026-08-05",
+    "adjusted": true,
+    "reason": "Lauf 25 km",
+    "calories": 3100,
+    "baseCalories": 2400,
+    "macroGoals": { "protein": 150, "carbs": 480 },
+    "enabledMacros": ["protein", "carbs"],
+    "macroModes": { "calories": "limit", "protein": "target", "carbs": "target", "fat": "limit", "fiber": "target", "sugar": "limit" },
+    "goalThreshold": 10,
+    "caloriesEnabled": true
+  }
+}
+```
+
+| Field | Type | Meaning |
+|-------|------|---------|
+| `date` | string | The requested date. |
+| `adjusted` | bool | `true` when a Tagesziel-Anpassung exists for the date. |
+| `reason` | string \| null | The adjustment's reason; `null` when unadjusted or none given. |
+| `calories` | int \| null | Calorie goal of the Tagesziel; `null` = no goal (also when calories are hidden for the account). |
+| `baseCalories` | int \| null | The Basisziel's calories, only on an adjusted day (else `null`). |
+| `macroGoals` | object | Goal in grams per **enabled** macro that has one (`protein`, `carbs`, `fat`, `fiber`, `sugar`). Missing key = no goal. `{}` when none. |
+| `enabledMacros` | string[] | Macros the account tracks (same set `entries` carries). `[]` when none. |
+| `macroModes` | object | `limit` or `target` for `calories` and all five macros. |
+| `goalThreshold` | int | Percent tolerance for the status colours (0–99). |
+| `caloriesEnabled` | bool | `false` when the account hides calories. |
+
+A macro disabled later is simply absent from `macroGoals`; its adjusted value is
+kept and reappears if the macro is enabled again.
+
+#### `GET /api/dashboard` and `GET /overview`
+
+- `dailyStats[].status` (the day dots, also for each friend's card in
+  `sharedViews[]`) is computed against the Tagesziel of **each date**.
+- The today-based fields `dailyGoal`, `goalStatus`, `goalDelta`, `calorieStatus`,
+  `macroStatuses` and the top-level `macroGoals` keep their today semantics but
+  are resolved against **today's** Tagesziel (also when the requested range ends
+  before today). `sharedViews[].dailyGoal` is the same, per account.
+- A friend's adjustments are looked up only when they share nutrition. Without
+  the share, the friend's `dailyStats` is `[]` and `dailyGoal` /
+  `goalThreshold` are `null`, as before.
+- The selected day's goal for the Today panel comes from
+  `GET /entries/day` (`goal` above), not from these fields.
 
 ### `POST /entries`
 

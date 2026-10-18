@@ -98,8 +98,6 @@ func (h *EntriesHandler) Dashboard(w http.ResponseWriter, r *http.Request) {
 	mu := service.ParseMacroUser(user.MacrosEnabled, user.MacroGoals, user.DailyGoal, user.GoalThreshold)
 	macroModes := service.GetMacroModes(mu)
 	enabledMacros := service.GetEnabledMacros(mu)
-	macroGoals := service.GetMacroGoals(mu)
-	dailyGoal := service.GetCalorieGoal(mu)
 
 	// Resolve AI availability up front (user key / global settings — no DB round
 	// trip) so the usage lookup can join the concurrent batch below.
@@ -125,11 +123,21 @@ func (h *EntriesHandler) Dashboard(w http.ResponseWriter, r *http.Request) {
 		weightEntry     *service.WeightResult
 		lastWeightEntry *service.WeightResult
 		aiUsedToday     int
+		dayGoals        *service.DayGoals
 	)
 	g, gctx := errgroup.WithContext(r.Context())
 	g.Go(func() error {
 		var err error
 		totalsByDate, macroTotalsAll, err = getTotalsAndMacrosByDate(gctx, h.Pool, user.ID, oldest, newest)
+		return err
+	})
+	g.Go(func() error {
+		// Each date's Tagesziel, today's included even when the range ends
+		// before it. Fatal like the totals: silently falling back to the
+		// Basisziel would colour days against the wrong goal.
+		var err error
+		goalOldest, goalNewest := goalSpan(oldest, newest, todayStr)
+		dayGoals, err = service.ResolveDayGoalRange(gctx, h.Pool, user.ID, mu, goalOldest, goalNewest)
 		return err
 	})
 	g.Go(func() error {
@@ -160,6 +168,13 @@ func (h *EntriesHandler) Dashboard(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// The today-based fields below (dailyGoal, goalStatus, calorieStatus,
+	// macroStatuses, macroGoals) keep their meaning but are resolved against
+	// today's Tagesziel; the Basisziel stays in user.dailyGoal / user.macroGoals.
+	todayGoal := dayGoals.On(todayStr).GoalValues
+	dailyGoal := todayGoal.Calories
+	macroGoals := todayGoal.MacroMap()
+
 	todayTotal := totalsByDate[todayStr]
 	// Only expose macro totals downstream when macros are enabled, preserving the
 	// prior behaviour where macroTotalsByDate stayed nil (so todayMacroTotals and
@@ -175,7 +190,7 @@ func (h *EntriesHandler) Dashboard(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	dailyStats := buildDailyStats(dayOptions, totalsByDate, dailyGoal, enabledMacros, macroGoals, macroModes, macroTotalsByDate, mu.GoalThreshold)
+	dailyStats := buildDailyStats(dayOptions, totalsByDate, dayGoals.ValuesOn, enabledMacros, macroModes, macroTotalsByDate, mu.GoalThreshold)
 
 	caloriesEnabled := true
 	if v, ok := mu.MacrosEnabled["calories"]; ok && v == false {
@@ -264,7 +279,6 @@ func (h *EntriesHandler) Dashboard(w http.ResponseWriter, r *http.Request) {
 			}
 			linkOldest := linkDayOptions[len(linkDayOptions)-1]
 			linkNewest := linkDayOptions[0]
-			linkGoal := service.GetCalorieGoal(lmu)
 			shares := link.SharesToMe
 
 			// Omit the card entirely if the friend shares nothing with us.
@@ -289,14 +303,22 @@ func (h *EntriesHandler) Dashboard(w http.ResponseWriter, r *http.Request) {
 					slog.Error("dashboard: failed to load linked user's calorie totals", "error", err, "linkUserId", link.UserID)
 					return
 				}
+				// The friend's adjustments are nutrition data: looked up only
+				// here, behind the nutrition share.
+				goalOldest, goalNewest := goalSpan(linkOldest, linkNewest, linkTodayStr)
+				linkGoals, err := service.ResolveDayGoalRange(r.Context(), h.Pool, link.UserID, lmu, goalOldest, goalNewest)
+				if err != nil {
+					slog.Error("dashboard: failed to load linked user's goals", "error", err, "linkUserId", link.UserID)
+					return
+				}
+				linkGoal := linkGoals.On(linkTodayStr).Calories
 				linkEnabledMacros := service.GetEnabledMacros(lmu)
-				linkMacroGoals := service.GetMacroGoals(lmu)
 				linkMacroModes := service.GetMacroModes(lmu)
 				var linkMacroTotals map[string]map[string]int
 				if len(linkEnabledMacros) > 0 {
 					linkMacroTotals = linkMacroAll
 				}
-				stats = buildDailyStats(linkDayOptions, linkTotals, linkGoal, linkEnabledMacros, linkMacroGoals, linkMacroModes, linkMacroTotals, lmu.GoalThreshold)
+				stats = buildDailyStats(linkDayOptions, linkTotals, linkGoals.ValuesOn, linkEnabledMacros, linkMacroModes, linkMacroTotals, lmu.GoalThreshold)
 				dailyGoalOut = linkGoal
 				goalThresholdOut = lmu.GoalThreshold
 			}
@@ -414,10 +436,24 @@ func (h *EntriesHandler) DayEntries(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	enabledMacros := service.GetEnabledMacros(service.ParseMacroUser(targetUser.MacrosEnabled, targetUser.MacroGoals, targetUser.DailyGoal, targetUser.GoalThreshold))
+	mu := service.ParseMacroUser(targetUser.MacrosEnabled, targetUser.MacroGoals, targetUser.DailyGoal, targetUser.GoalThreshold)
+	enabledMacros := service.GetEnabledMacros(mu)
 	entries := getEntriesForDate(r, h.Pool, targetUserID, dateStr, enabledMacros, displayTz)
 
-	JSON(w, http.StatusOK, map[string]any{"ok": true, "date": dateStr, "entries": entries})
+	// The goal is the target's, not the viewer's: a friend's day is judged
+	// against the friend's Tagesziel. RequireLinkAuth(ShareNutrition) has
+	// already established that the viewer may see the target's nutrition.
+	dayGoal, err := service.ResolveDayGoal(r.Context(), h.Pool, targetUser, dateStr)
+	if err != nil {
+		slog.Error("day entries: failed to resolve goal", "error", err)
+		ErrorJSON(w, http.StatusInternalServerError, "Failed to load entries")
+		return
+	}
+
+	JSON(w, http.StatusOK, map[string]any{
+		"ok": true, "date": dateStr, "entries": entries,
+		"goal": newDayGoalPayload(mu, dayGoal),
+	})
 }
 
 // Overview handles GET /overview
@@ -450,7 +486,15 @@ func (h *EntriesHandler) Overview(w http.ResponseWriter, r *http.Request) {
 	newest := dayOptions[0]
 	todayStrTz := service.FormatDateInTz(time.Now(), targetTz)
 
-	dailyGoal := service.GetCalorieGoal(mu)
+	goalOldest, goalNewest := goalSpan(oldest, newest, todayStrTz)
+	dayGoals, err := service.ResolveDayGoalRange(r.Context(), h.Pool, targetUserID, mu, goalOldest, goalNewest)
+	if err != nil {
+		slog.Error("overview: failed to load goals", "error", err)
+		ErrorJSON(w, http.StatusInternalServerError, "Failed to load entries")
+		return
+	}
+	// today-based fields use today's Tagesziel, the dots use each date's own.
+	dailyGoal := dayGoals.On(todayStrTz).Calories
 	totalsByDate, err := getTotalsByDate(r, h.Pool, targetUserID, oldest, newest)
 	if err != nil {
 		slog.Error("overview: failed to load calorie totals", "error", err)
@@ -460,14 +504,13 @@ func (h *EntriesHandler) Overview(w http.ResponseWriter, r *http.Request) {
 	todayTotal := totalsByDate[todayStrTz]
 	threshold := mu.GoalThreshold
 	enabledMacros := service.GetEnabledMacros(mu)
-	macroGoals := service.GetMacroGoals(mu)
 	macroModes := service.GetMacroModes(mu)
 	var macroTotalsByDate map[string]map[string]int
 	if len(enabledMacros) > 0 {
 		macroTotalsByDate, _ = service.GetMacroTotalsByDate(r.Context(), h.Pool, targetUserID, oldest, newest)
 	}
 
-	dailyStats := buildDailyStats(dayOptions, totalsByDate, dailyGoal, enabledMacros, macroGoals, macroModes, macroTotalsByDate, threshold)
+	dailyStats := buildDailyStats(dayOptions, totalsByDate, dayGoals.ValuesOn, enabledMacros, macroModes, macroTotalsByDate, threshold)
 
 	goalStatus := "unset"
 	var goalDelta *int

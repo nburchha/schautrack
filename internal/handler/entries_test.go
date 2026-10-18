@@ -169,6 +169,27 @@ func TestBuildMacroMapValues(t *testing.T) {
 	}
 }
 
+// fixedGoals is a goal lookup that returns the same Tagesziel for every date.
+func fixedGoals(calories *int, macros map[string]int) func(string) service.GoalValues {
+	v := service.GoalValues{Calories: calories}
+	for key, n := range macros {
+		n := n
+		switch key {
+		case "protein":
+			v.Protein = &n
+		case "carbs":
+			v.Carbs = &n
+		case "fat":
+			v.Fat = &n
+		case "fiber":
+			v.Fiber = &n
+		case "sugar":
+			v.Sugar = &n
+		}
+	}
+	return func(string) service.GoalValues { return v }
+}
+
 func TestBuildDailyStats(t *testing.T) {
 	g := func(n int) *int { return &n }
 
@@ -176,7 +197,7 @@ func TestBuildDailyStats(t *testing.T) {
 		stats := buildDailyStats(
 			[]string{"2025-03-15"},
 			map[string]int{"2025-03-15": 1500},
-			nil, nil, nil, nil, nil, 10,
+			fixedGoals(nil, nil), nil, nil, nil, 10,
 		)
 		if len(stats) != 1 {
 			t.Fatalf("got %d stats, want 1", len(stats))
@@ -193,7 +214,7 @@ func TestBuildDailyStats(t *testing.T) {
 		stats := buildDailyStats(
 			[]string{"2025-03-15"},
 			map[string]int{"2025-03-15": 1500},
-			g(2000), nil, nil, nil, nil, 10,
+			fixedGoals(g(2000), nil), nil, nil, nil, 10,
 		)
 		if stats[0].Status != "under" {
 			t.Errorf("status = %q, want \"under\"", stats[0].Status)
@@ -204,7 +225,7 @@ func TestBuildDailyStats(t *testing.T) {
 		stats := buildDailyStats(
 			[]string{"2025-03-15"},
 			map[string]int{"2025-03-15": 2100},
-			g(2000), nil, nil, nil, nil, 10,
+			fixedGoals(g(2000), nil), nil, nil, nil, 10,
 		)
 		if stats[0].Status != "over" {
 			t.Errorf("status = %q, want \"over\"", stats[0].Status)
@@ -215,7 +236,7 @@ func TestBuildDailyStats(t *testing.T) {
 		stats := buildDailyStats(
 			[]string{"2025-03-15"},
 			map[string]int{"2025-03-15": 2201},
-			g(2000), nil, nil, nil, nil, 10,
+			fixedGoals(g(2000), nil), nil, nil, nil, 10,
 		)
 		if stats[0].Status != "over_threshold" {
 			t.Errorf("status = %q, want \"over_threshold\"", stats[0].Status)
@@ -229,7 +250,7 @@ func TestBuildDailyStats(t *testing.T) {
 		stats := buildDailyStats(
 			[]string{"2025-03-15"},
 			map[string]int{},
-			g(2000), nil, nil, nil, nil, 10,
+			fixedGoals(g(2000), nil), nil, nil, nil, 10,
 		)
 		if stats[0].Status != "zero" {
 			t.Errorf("status = %q, want \"zero\"", stats[0].Status)
@@ -242,7 +263,7 @@ func TestBuildDailyStats(t *testing.T) {
 			"2025-03-15": 1500,
 			"2025-03-14": 2100,
 		}
-		stats := buildDailyStats(days, totals, g(2000), nil, nil, nil, nil, 10)
+		stats := buildDailyStats(days, totals, fixedGoals(g(2000), nil), nil, nil, nil, 10)
 		if len(stats) != 3 {
 			t.Fatalf("got %d stats, want 3", len(stats))
 		}
@@ -258,9 +279,8 @@ func TestBuildDailyStats(t *testing.T) {
 		stats := buildDailyStats(
 			[]string{"2025-03-15"},
 			map[string]int{"2025-03-15": 1500},
-			g(2000),
+			fixedGoals(g(2000), map[string]int{"protein": 150}),
 			[]string{"protein"},
-			map[string]int{"protein": 150},
 			map[string]string{"protein": "target"},
 			map[string]map[string]int{"2025-03-15": {"protein": 50}},
 			10,
