@@ -101,6 +101,11 @@ function AdjustmentForm({ onClose, goal, autoCalcCalories }: Omit<Props, 'open'>
     return input;
   };
 
+  // The server rejects a request with nothing in it (no calories, no macro, no
+  // reason), so there is nothing to save then; Reset is the way back.
+  const sendable = Object.keys(buildInput()).length > 0;
+  const canSave = dirty && sendable;
+
   const refreshAndClose = () => {
     void queryClient.invalidateQueries({ queryKey: ['dashboard'] });
     void queryClient.invalidateQueries({ queryKey: ['day-entries'] });
@@ -136,7 +141,7 @@ function AdjustmentForm({ onClose, goal, autoCalcCalories }: Omit<Props, 'open'>
       className="flex flex-col gap-4"
       onSubmit={(e) => {
         e.preventDefault();
-        if (dirty && !busy) {
+        if (canSave && !busy) {
           setError(null);
           save.mutate();
         }
@@ -233,7 +238,7 @@ function AdjustmentForm({ onClose, goal, autoCalcCalories }: Omit<Props, 'open'>
           <Button type="button" variant="ghost" onClick={onClose} disabled={busy}>
             {t('goalAdjust.cancel')}
           </Button>
-          <Button type="submit" data-testid="goal-adjust-save" disabled={!dirty || busy} loading={save.isPending}>
+          <Button type="submit" data-testid="goal-adjust-save" disabled={!canSave || busy} loading={save.isPending}>
             {t('goalAdjust.save')}
           </Button>
         </div>

@@ -131,6 +131,24 @@ describe('AdjustmentSheet saving', () => {
     expect(screen.getByTestId('goal-adjust-save')).toBeEnabled();
   });
 
+  it('cannot save a request with nothing in it', async () => {
+    // No macro is enabled, so clearing the calories leaves nothing to send.
+    renderSheet(goal({ enabledMacros: [], macroGoals: {} }));
+    await userEvent.clear(field('calories'));
+    expect(screen.getByTestId('goal-adjust-save')).toBeDisabled();
+    await userEvent.type(field('reason'), 'x');
+    expect(screen.getByTestId('goal-adjust-save')).toBeEnabled();
+    await userEvent.clear(field('reason'));
+    expect(screen.getByTestId('goal-adjust-save')).toBeDisabled();
+  });
+
+  it('does not submit an empty request with Enter', async () => {
+    renderSheet(goal({ enabledMacros: [], macroGoals: {} }));
+    await userEvent.clear(field('calories'));
+    await userEvent.type(field('reason'), '{Enter}');
+    expect(setDayGoal).not.toHaveBeenCalled();
+  });
+
   it('shows the server message and stays open on a rejected save', async () => {
     vi.mocked(setDayGoal).mockRejectedValue(new ApiError(400, 'calories: must be a whole number from 1 to 9999'));
     const { onClose } = renderSheet();
