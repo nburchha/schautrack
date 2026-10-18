@@ -5,9 +5,12 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
+	"unicode/utf8"
 
 	"github.com/go-chi/chi/v5"
+	"github.com/jackc/pgx/v5"
 
 	"schautrack/internal/config"
 )
@@ -21,7 +24,7 @@ func withChiURLParam(r *http.Request, key, value string) *http.Request {
 
 func TestBarcode_InvalidFormat(t *testing.T) {
 	cfg := &config.Config{BuildVersion: "test", SupportEmail: "test@test.com"}
-	h := Barcode(cfg)
+	h := Barcode(cfg, nil)
 
 	tests := []struct {
 		name string
@@ -36,7 +39,7 @@ func TestBarcode_InvalidFormat(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			r := httptest.NewRequest("GET", "/api/barcode/"+tt.code, nil)
+			r := httptest.NewRequest("POST", "/api/barcode/"+tt.code, nil)
 			r = withChiURLParam(r, "code", tt.code)
 			w := httptest.NewRecorder()
 
@@ -67,67 +70,166 @@ func TestBarcode_ValidFormat13Digits(t *testing.T) {
 	}
 }
 
-func TestBarcode_MockOpenFoodFacts(t *testing.T) {
-	// Start a mock server that returns a known response
-	mockServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		json.NewEncoder(w).Encode(map[string]any{
-			"status": 1,
-			"product": map[string]any{
-				"product_name": "Test Chocolate",
-				"nutriments": map[string]any{
-					"energy-kcal_100g":   float64(550),
-					"proteins_100g":      float64(7.5),
-					"carbohydrates_100g": float64(57.0),
-					"fat_100g":           float64(31.0),
-				},
-				"serving_size":     "40g",
-				"serving_quantity": float64(40),
-			},
-		})
-	}))
-	defer mockServer.Close()
-
-	// We can't easily inject the HTTP client into Barcode(), since it creates
-	// its own client internally. Instead, we test the regex validation and
-	// the response parsing by testing with a real mock server.
-	// For a full integration test, we'd need to refactor Barcode to accept
-	// an HTTP client or base URL.
-
-	// For now, verify the regex accepts valid barcodes
-	validCodes := []string{"12345678", "123456789", "1234567890", "12345678901", "123456789012", "1234567890123"}
-	for _, code := range validCodes {
+func TestBarcode_RegexAcceptsEightToThirteenDigits(t *testing.T) {
+	for _, code := range []string{"12345678", "123456789", "1234567890", "12345678901", "123456789012", "1234567890123"} {
 		if !barcodeRe.MatchString(code) {
 			t.Errorf("barcodeRe should accept %q", code)
 		}
 	}
-
-	invalidCodes := []string{"1234567", "12345678901234", "abcdefgh", "1234-567", ""}
-	for _, code := range invalidCodes {
+	for _, code := range []string{"1234567", "12345678901234", "abcdefgh", "1234-567", ""} {
 		if barcodeRe.MatchString(code) {
 			t.Errorf("barcodeRe should reject %q", code)
 		}
 	}
 }
 
-func TestBarcode_ProductNotFound(t *testing.T) {
-	// Mock server returning status 0 (product not found)
-	mockServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		json.NewEncoder(w).Encode(map[string]any{
-			"status":  0,
-			"product": map[string]any{},
-		})
+// offServer stands in for Open Food Facts. The handler under test is pointed at
+// it through barcodeHandler's base URL.
+func offServer(t *testing.T, status int, body any) string {
+	t.Helper()
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(status)
+		json.NewEncoder(w).Encode(body)
 	}))
-	defer mockServer.Close()
-
-	// Same limitation: the handler creates its own HTTP client with a hardcoded URL.
-	// We verify the barcode regex coverage is complete.
-	t.Log("Barcode handler creates its own HTTP client; full mock test requires refactoring")
+	t.Cleanup(srv.Close)
+	return srv.URL
 }
 
-func TestBarcode_GatewayTimeout(t *testing.T) {
-	// Verify that non-200 responses from upstream produce 502
-	// This would require the handler to accept a custom base URL.
-	t.Log("Barcode handler uses hardcoded URL; gateway timeout test requires refactoring")
+// emptyCatalog is a database with no stored products: every read finds no row,
+// and the cases that use it never get as far as storing one.
+type emptyCatalog struct{ querier }
+
+type noRow struct{}
+
+func (noRow) Scan(...any) error { return pgx.ErrNoRows }
+
+func (emptyCatalog) QueryRow(context.Context, string, ...any) pgx.Row { return noRow{} }
+
+// deadOffServer is an Open Food Facts that refuses connections.
+func deadOffServer(t *testing.T) string {
+	t.Helper()
+	srv := httptest.NewServer(http.NotFoundHandler())
+	srv.Close()
+	return srv.URL
+}
+
+func lookup(t *testing.T, base, code string) *httptest.ResponseRecorder {
+	t.Helper()
+	cfg := &config.Config{BuildVersion: "test", SupportEmail: "test@test.com"}
+	h := barcodeHandler(cfg, emptyCatalog{}, base)
+	r := withChiURLParam(httptest.NewRequest("POST", "/api/barcode/"+code, nil), "code", code)
+	w := httptest.NewRecorder()
+	h(w, r)
+	return w
+}
+
+func TestBarcode_ProductNotFound(t *testing.T) {
+	base := offServer(t, 200, map[string]any{"status": 0, "product": map[string]any{}})
+	w := lookup(t, base, "5449000000996")
+
+	var resp map[string]any
+	json.Unmarshal(w.Body.Bytes(), &resp)
+	if w.Code != http.StatusOK || resp["ok"] != false || resp["error"] != "Product not found." {
+		t.Errorf("got %d %v, want 200 with ok=false and a not-found error", w.Code, resp)
+	}
+}
+
+// Without a stored product there is nothing to fall back on, so a failing Open
+// Food Facts stays the error it is.
+func TestBarcode_UpstreamFailureWithoutStoredProduct(t *testing.T) {
+	tests := []struct {
+		name string
+		base func(t *testing.T) string
+		want int
+	}{
+		{"non-200 is a bad gateway", func(t *testing.T) string { return offServer(t, 503, map[string]any{}) }, http.StatusBadGateway},
+		{"unreachable is a gateway timeout", deadOffServer, http.StatusGatewayTimeout},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if w := lookup(t, tt.base(t), "5449000000996"); w.Code != tt.want {
+				t.Errorf("status = %d, want %d", w.Code, tt.want)
+			}
+		})
+	}
+}
+
+// A product without a usable calorie value cannot be an entry component, so it
+// is reported as such and nothing is stored (emptyCatalog would panic on a write).
+// "No data" and "data nobody can believe" get different notes.
+func TestBarcode_NoCaloriesStoresNothing(t *testing.T) {
+	const absent = "No calorie data available for this product."
+	tests := []struct {
+		name       string
+		nutriments map[string]any
+		note       string
+	}{
+		{"absent", map[string]any{"proteins_100g": 3.0}, absent},
+		{"implausible", map[string]any{"energy-kcal_100g": 5000.0},
+			"Open Food Facts reports an implausible calorie value (5000 kcal per 100 g); it was not stored."},
+		{"fractional implausible", map[string]any{"energy-kcal_100g": 1234.5},
+			"Open Food Facts reports an implausible calorie value (1234.5 kcal per 100 g); it was not stored."},
+		{"negative", map[string]any{"energy-kcal_100g": -1.0},
+			"Open Food Facts reports an implausible calorie value (-1 kcal per 100 g); it was not stored."},
+		{"not a number", map[string]any{"energy-kcal_100g": "lots"}, absent},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			base := offServer(t, 200, map[string]any{"status": 1, "product": map[string]any{
+				"product_name": "Odd", "nutriments": tt.nutriments,
+			}})
+			w := lookup(t, base, "5449000000996")
+
+			var resp map[string]any
+			json.Unmarshal(w.Body.Bytes(), &resp)
+			if w.Code != http.StatusOK || resp["ok"] != true || resp["caloriesPer100g"] != nil || resp["food"] != nil {
+				t.Errorf("got %d %v, want ok with no calories and no food", w.Code, resp)
+			}
+			if resp["note"] != tt.note {
+				t.Errorf("note = %q, want %q", resp["note"], tt.note)
+			}
+		})
+	}
+}
+
+func TestProductName(t *testing.T) {
+	tests := []struct {
+		name, product, brands, want string
+	}{
+		{"plain", "Skyr", "", "Skyr"},
+		{"brand appended", "Skyr Natur", "Arla, Other", "Skyr Natur (Arla)"},
+		{"brand already in name", "Arla Skyr", "Arla", "Arla Skyr"},
+		{"brand match ignores case", "ARLA skyr", "arla", "ARLA skyr"},
+		{"unnamed falls back to the EAN", "  ", "Arla", "Unknown product 5449000000996"},
+		{"trimmed", "  Skyr  ", "", "Skyr"},
+		{"NUL stripped (TEXT cannot store it)", "Sk\x00yr", "Ar\x00la", "Skyr (Arla)"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := productName("5449000000996", tt.product, tt.brands); got != tt.want {
+				t.Errorf("productName = %q, want %q", got, tt.want)
+			}
+		})
+	}
+	long := strings.Repeat("ä", 200)
+	if got := productName("5449000000996", long, ""); len(got) > maxFoodName || !utf8.ValidString(got) {
+		t.Errorf("long name = %d bytes, valid=%v; want <= %d bytes of valid UTF-8", len(got), utf8.ValidString(got), maxFoodName)
+	}
+}
+
+func TestOffNumber(t *testing.T) {
+	n := map[string]any{"ok": 12.345, "zero": 0.0, "big": 1001.0, "neg": -0.1, "str": "12"}
+	if v := offNumber(n, "ok", 1000); v == nil || *v != 12.35 {
+		t.Errorf("ok = %v, want 12.35 (two decimals, as the catalog stores)", v)
+	}
+	if v := offNumber(n, "zero", 1000); v == nil || *v != 0 {
+		t.Errorf("zero = %v, want a real 0 (0 is data, only absence is unknown)", v)
+	}
+	for _, key := range []string{"big", "neg", "str", "missing"} {
+		if v := offNumber(n, key, 1000); v != nil {
+			t.Errorf("%s = %v, want nil (unknown)", key, *v)
+		}
+	}
 }
 
 func TestHasValidCheckDigit(t *testing.T) {
@@ -167,9 +269,9 @@ func TestHasValidCheckDigit(t *testing.T) {
 
 func TestBarcode_CheckDigitMismatch(t *testing.T) {
 	cfg := &config.Config{BuildVersion: "test", SupportEmail: "test@test.com"}
-	h := Barcode(cfg)
+	h := Barcode(cfg, nil)
 
-	r := httptest.NewRequest("GET", "/api/barcode/4311501062448", nil)
+	r := httptest.NewRequest("POST", "/api/barcode/4311501062448", nil)
 	r = withChiURLParam(r, "code", "4311501062448") // last digit flipped
 	w := httptest.NewRecorder()
 	h(w, r)

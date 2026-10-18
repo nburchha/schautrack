@@ -133,14 +133,15 @@ func (h *V1Handler) MountAPIV1(pool *pgxpool.Pool) chi.Router {
 
 		r.With(middleware.RequireScope(service.ScopeLinksRead)).Get("/links", h.ListLinksV1)
 
-		// Barcode lookup is food data, so it rides on foods:read rather than
-		// getting a scope of its own.
+		// Barcode lookup is food data, so it rides on foods rather than getting
+		// a scope of its own. It needs foods:write, not read: a lookup stores the
+		// product in the shared catalog, so a read-only token must not trigger it.
 		//
 		// The scope check runs BEFORE the limiter on both of the routes below:
 		// a 403 costs nothing to serve, and letting a wrongly-scoped token burn
 		// the account's estimate budget would let it deny service to the
 		// correctly-scoped token beside it.
-		r.With(middleware.RequireScope(service.ScopeFoodsRead),
+		r.With(middleware.RequireScope(service.ScopeFoodsWrite),
 			optionalLimiter(h.BarcodeLimiter)).Get("/barcode/{code}", h.BarcodeV1)
 
 		// Its own scope, implied by nothing: every call spends real money.

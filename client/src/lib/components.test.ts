@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
-import type { EntryComponent } from '@/types';
+import type { EntryComponent, Food } from '@/types';
 import {
-  portionNutrients, sumMacros, isIncomplete, kcalShares, energySplit, entryMacroTotals, formatAmount,
+  portionNutrients, sumMacros, isIncomplete, kcalShares, energySplit, entryMacroTotals, formatAmount, foodPortion, servingGrams, parseGrams,
 } from './components';
 
 function comp(over: Partial<EntryComponent> & { grams: number; calories_per_100g: number }): EntryComponent {
@@ -96,5 +96,49 @@ describe('formatAmount', () => {
     expect(formatAmount(12.4, 'en')).toBe('12');
     expect(formatAmount(250, 'en')).toBe('250');
     expect(formatAmount(6.75, 'de')).toBe('6,8');
+  });
+});
+
+describe('foodPortion', () => {
+  it('equals what the saved component row will show', () => {
+    const food: Food = {
+      id: 9, source: 'off', source_code: '4311501062449', name: 'Skyr', source_classification: null,
+      calories_per_100g: 63, macros_per_100g: { protein_g: 11, carbs_g: 4, fat_g: 0.2, fiber_g: null, sugar_g: 4 },
+    };
+    const saved = portionNutrients(comp({ grams: 90, calories_per_100g: 63, macros_per_100g: food.macros_per_100g }));
+    expect(foodPortion(food, 90)).toEqual(saved);
+    expect(foodPortion(food, 90).macros.fiber).toBeNull();
+  });
+});
+
+describe('servingGrams', () => {
+  it('rounds a usable serving to the hundredths the server stores', () => {
+    expect(servingGrams(150)).toBe(150);
+    expect(servingGrams(33.333333)).toBe(33.33);
+  });
+
+  it('rejects what the grams field would reject', () => {
+    expect(servingGrams(0.005)).toBeNull();
+    expect(servingGrams(25000)).toBeNull();
+    expect(servingGrams(0)).toBeNull();
+    expect(servingGrams(-3)).toBeNull();
+    expect(servingGrams(Number.NaN)).toBeNull();
+    expect(servingGrams(null)).toBeNull();
+    expect(servingGrams(undefined)).toBeNull();
+  });
+});
+
+describe('parseGrams', () => {
+  it('keeps the hundredths of a plain decimal, with comma or point', () => {
+    expect(parseGrams('12,5')).toBe(12.5);
+    expect(parseGrams('0.25')).toBe(0.25);
+    expect(parseGrams('.5')).toBe(0.5);
+    expect(parseGrams(' 33.333 ')).toBe(33.33);
+  });
+
+  it('evaluates math and rejects what the server would', () => {
+    expect(parseGrams('2*45')).toBe(90);
+    for (const bad of ['', 'abc', '0', '0.001', '-5', '10000.01', '20000']) expect(parseGrams(bad)).toBeNull();
+    expect(parseGrams('10000')).toBe(10000);
   });
 });

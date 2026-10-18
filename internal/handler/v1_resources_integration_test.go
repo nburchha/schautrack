@@ -621,8 +621,12 @@ func TestV1MeNeedsNoScopeButPatchDoes(t *testing.T) {
 func TestV1DisabledFeaturesAre404(t *testing.T) {
 	e := newV1Env(t)
 
-	requireProblem(t, e.get("/api/v1/barcode/4006381333931", e.token(service.ScopeFoodsRead)),
+	requireProblem(t, e.get("/api/v1/barcode/4006381333931", e.token(service.ScopeFoodsWrite)),
 		http.StatusNotFound)
+	// The scope check comes first, so a read-only token learns nothing about
+	// whether the feature is on.
+	requireProblem(t, e.get("/api/v1/barcode/4006381333931", e.token(service.ScopeFoodsRead)),
+		http.StatusForbidden)
 	requireProblem(t, e.post("/api/v1/ai/estimate", e.token(service.ScopeAIEstimate), `{}`),
 		http.StatusNotFound)
 }

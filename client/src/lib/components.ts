@@ -1,13 +1,14 @@
-import type { ComponentMacros, EntryComponent } from '@/types';
+import type { ComponentMacros, EntryComponent, Food } from '@/types';
 import { MACRO_KEYS, type MacroKey } from '@/lib/macros';
 import { activeLocale, formatNumber } from '@/lib/format';
+import { parseAmount } from '@/lib/mathParser';
 
 // Pure maths for the meal detail page. A component stores nutrients per 100 g
 // as captured; what a portion contributes is grams / 100 * value. An unknown
 // value (null) stays unknown. Treating it as 0 would show "0 g fiber" for a
 // food that simply has no fiber figure.
 
-const FIELD: Record<MacroKey, keyof ComponentMacros> = {
+export const MACRO_FIELD: Record<MacroKey, keyof ComponentMacros> = {
   protein: 'protein_g',
   carbs: 'carbs_g',
   fat: 'fat_g',
@@ -24,14 +25,22 @@ export interface PortionNutrients {
 }
 
 /** What `component.grams` of the food contributes. */
-export function portionNutrients(c: EntryComponent): PortionNutrients {
+export function portionNutrients(c: Pick<EntryComponent, 'grams' | 'calories_per_100g' | 'macros_per_100g'>): PortionNutrients {
   const factor = c.grams / 100;
   const macros = {} as Record<MacroKey, number | null>;
   for (const key of MACRO_KEYS) {
-    const per100 = c.macros_per_100g[FIELD[key]];
+    const per100 = c.macros_per_100g[MACRO_FIELD[key]];
     macros[key] = per100 == null ? null : per100 * factor;
   }
   return { kcal: c.calories_per_100g * factor, macros };
+}
+
+/**
+ * What `grams` of a catalog food will contribute once it is a component: the
+ * same arithmetic as the saved row, so a preview matches what gets stored.
+ */
+export function foodPortion(food: Food, grams: number): PortionNutrients {
+  return portionNutrients({ grams, calories_per_100g: food.calories_per_100g ?? 0, macros_per_100g: food.macros_per_100g });
 }
 
 export interface MacroSum {
@@ -93,7 +102,7 @@ export function energySplit(macros: { protein: number | null; carbs: number | nu
 /** Macro totals from the entry payload (server-rounded grams), keyed like MACRO_KEYS. */
 export function entryMacroTotals(macros: ComponentMacros): Record<MacroKey, number | null> {
   const out = {} as Record<MacroKey, number | null>;
-  for (const key of MACRO_KEYS) out[key] = macros[FIELD[key]];
+  for (const key of MACRO_KEYS) out[key] = macros[MACRO_FIELD[key]];
   return out;
 }
 
@@ -105,4 +114,37 @@ export function roundAmount(value: number): number {
 /** roundAmount, formatted in the UI locale. */
 export function formatAmount(value: number, locale: string = activeLocale()): string {
   return formatNumber(roundAmount(value), locale);
+}
+
+export const MIN_GRAMS = 0.01;
+export const MAX_GRAMS = 10000;
+
+const PLAIN_DECIMAL_RE = /^(\d+([.,]\d*)?|[.,]\d+)$/;
+
+/** "2*45" and "12,5" both work; the server stores hundredths of a gram. */
+export function parseGrams(raw: string): number | null {
+  const text = raw.trim();
+  let value: number;
+  if (PLAIN_DECIMAL_RE.test(text)) {
+    // parseAmount rounds to whole numbers, which would turn "12,5" into 13.
+    value = Number(text.replace(',', '.'));
+  } else {
+    const parsed = parseAmount(text.replace(/,/g, '.'), { maxAbs: MAX_GRAMS });
+    if (!parsed.ok) return null;
+    value = parsed.value;
+  }
+  const grams = Math.round(value * 100) / 100;
+  return grams >= MIN_GRAMS && grams <= MAX_GRAMS ? grams : null;
+}
+
+export const DEFAULT_GRAMS = 100;
+
+/**
+ * A product's serving as grams, rounded the way the server stores it. null when
+ * Open Food Facts has none, or one the grams field would reject (0.005 g,
+ * 25 000 g): a crowdsourced value must not become the starting amount.
+ */
+export function servingGrams(servingQuantity: number | null | undefined): number | null {
+  if (servingQuantity == null || !(servingQuantity >= MIN_GRAMS && servingQuantity <= MAX_GRAMS)) return null;
+  return parseGrams(String(servingQuantity));
 }

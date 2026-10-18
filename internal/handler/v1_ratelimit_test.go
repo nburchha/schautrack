@@ -141,7 +141,7 @@ func TestV1BarcodeIsRateLimited(t *testing.T) {
 	var calls int
 	h := &V1Handler{
 		Barcode:        countingHandler(&calls, `{"ok":true,"product":{"name":"Oats"}}`),
-		Auth:           stubAuth(1, 7, service.ScopeFoodsRead),
+		Auth:           stubAuth(1, 7, service.ScopeFoodsWrite),
 		BarcodeLimiter: middleware.NewUserRateLimiter(2, time.Minute, false),
 		TokenLimiter:   middleware.NewTokenRateLimiter(100, time.Minute, false),
 	}
@@ -159,6 +159,41 @@ func TestV1BarcodeIsRateLimited(t *testing.T) {
 	}
 }
 
+// TestV1BarcodeNeedsFoodsWrite — a lookup stores the product in the shared
+// catalog, so a read-only token must be refused before the handler (and the
+// upstream call) runs, and without spending the account's lookup budget.
+func TestV1BarcodeNeedsFoodsWrite(t *testing.T) {
+	var calls int
+	limiter := middleware.NewUserRateLimiter(1, time.Minute, false)
+	barcode := countingHandler(&calls, `{"ok":true}`)
+
+	readOnly := (&V1Handler{Barcode: barcode, BarcodeLimiter: limiter,
+		Auth: stubAuth(1, 7, service.ScopeFoodsRead)}).MountAPIV1(nil)
+	rec := v1Do(t, readOnly, http.MethodGet, "/barcode/4006381333931")
+	if rec.Code != http.StatusForbidden {
+		t.Fatalf("foods:read token: status = %d, want 403 (body %s)", rec.Code, rec.Body.String())
+	}
+	if ct := rec.Header().Get("Content-Type"); ct != "application/problem+json" {
+		t.Errorf("Content-Type = %q, want application/problem+json", ct)
+	}
+	var p struct {
+		RequiredScope string `json:"required_scope"`
+	}
+	json.Unmarshal(rec.Body.Bytes(), &p)
+	if p.RequiredScope != service.ScopeFoodsWrite {
+		t.Errorf("required_scope = %q, want %q", p.RequiredScope, service.ScopeFoodsWrite)
+	}
+
+	writer := (&V1Handler{Barcode: barcode, BarcodeLimiter: limiter,
+		Auth: stubAuth(2, 7, service.ScopeFoodsWrite)}).MountAPIV1(nil)
+	if rec := v1Do(t, writer, http.MethodGet, "/barcode/4006381333931"); rec.Code != http.StatusOK {
+		t.Errorf("foods:write token: status = %d, want 200 — the refused call spent the budget", rec.Code)
+	}
+	if calls != 1 {
+		t.Errorf("barcode handler ran %d times, want 1", calls)
+	}
+}
+
 // TestV1OperationLimitersAreIndependent — the two limiters are sized to
 // different operations, so exhausting one must not close the other, and neither
 // may leak onto the rest of the surface.
@@ -167,7 +202,7 @@ func TestV1OperationLimitersAreIndependent(t *testing.T) {
 	h := &V1Handler{
 		AIEstimate:     countingHandler(&aiCalls, `{"ok":true,"calories":420}`),
 		Barcode:        countingHandler(&barcodeCalls, `{"ok":true,"product":{"name":"Oats"}}`),
-		Auth:           stubAuth(1, 7, service.ScopeAIEstimate, service.ScopeFoodsRead),
+		Auth:           stubAuth(1, 7, service.ScopeAIEstimate, service.ScopeFoodsWrite),
 		AILimiter:      middleware.NewUserRateLimiter(1, time.Minute, false),
 		BarcodeLimiter: middleware.NewUserRateLimiter(1, time.Minute, false),
 	}

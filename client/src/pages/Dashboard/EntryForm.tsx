@@ -4,6 +4,7 @@ import { useQueryClient } from '@tanstack/react-query';
 import type { AIUsage } from '@/types';
 import { createEntry } from '@/api/entries';
 import { useAuth } from '@/hooks/useAuth';
+import { useAuthStore } from '@/stores/authStore';
 import { createSavedFood } from '@/api/savedFoods';
 import { MACRO_LABELS, computeCaloriesFromMacros } from '@/lib/macros';
 import { parseAmount } from '@/lib/mathParser';
@@ -18,11 +19,9 @@ import { QuantityStepper } from '@/components/ui/QuantityStepper';
 import { useToastStore } from '@/stores/toastStore';
 import { lazyRoute } from '@/lib/lazyRoute';
 
-// Lazy-loaded so their chunks (BarcodeScanModal pulls in the heavy quagga2
-// barcode decoder) are only fetched when a user first opens a scanner, rather
+// Lazy-loaded so its chunk is only fetched when a user first opens it, rather
 // than eagerly on every page load.
 const AIPhotoModal = lazyRoute(() => import('./AIPhotoModal'));
-const BarcodeScanModal = lazyRoute(() => import('./BarcodeScanModal'));
 
 interface Props {
   selectedDate: string;
@@ -32,7 +31,6 @@ interface Props {
   hasAiEnabled: boolean;
   aiUsage: AIUsage | null;
   aiProviderName: string | null;
-  barcodeEnabled: boolean;
   onSubmit: () => void;
 }
 
@@ -106,8 +104,9 @@ function DraftRow({ item, onGrams, onRemove }: {
   );
 }
 
-export default function EntryForm({ selectedDate, caloriesEnabled, autoCalcCalories, enabledMacros, hasAiEnabled, aiUsage, aiProviderName, barcodeEnabled, onSubmit }: Props) {
+export default function EntryForm({ selectedDate, caloriesEnabled, autoCalcCalories, enabledMacros, hasAiEnabled, aiUsage, aiProviderName, onSubmit }: Props) {
   const { t } = useTranslation('dashboard');
+  const barcodeEnabled = useAuthStore((s) => s.barcodeEnabled);
   const [name, setName] = useState('');
   const [amount, setAmount] = useState('');
   const [macros, setMacros] = useState<Record<string, string>>({});
@@ -115,7 +114,6 @@ export default function EntryForm({ selectedDate, caloriesEnabled, autoCalcCalor
   const [loading, setLoading] = useState(false);
   const [date, setDate] = useState(selectedDate);
   const [aiModalOpen, setAiModalOpen] = useState(false);
-  const [barcodeModalOpen, setBarcodeModalOpen] = useState(false);
   const [savingFood, setSavingFood] = useState(false);
   const [localAiUsage, setLocalAiUsage] = useState<AIUsage | null>(aiUsage);
   const [draft, setDraft] = useState<DraftComponent[]>([]);
@@ -130,9 +128,7 @@ export default function EntryForm({ selectedDate, caloriesEnabled, autoCalcCalor
   // so its existing close-cleanup effects keep running; it just isn't mounted —
   // and its chunk isn't fetched — until the first open.
   const aiModalMounted = useRef(false);
-  const barcodeModalMounted = useRef(false);
   if (aiModalOpen) aiModalMounted.current = true;
-  if (barcodeModalOpen) barcodeModalMounted.current = true;
 
   useEffect(() => {
     setLocalAiUsage(aiUsage);
@@ -285,7 +281,7 @@ export default function EntryForm({ selectedDate, caloriesEnabled, autoCalcCalor
     <>
       {/* Catalog search sits outside the <form> so Enter in it never submits the entry. */}
       <div className="mb-3 flex flex-col gap-2 pt-1" data-testid="entry-form-search">
-        <FoodSearch onPick={addToDraft} pickLabel={t('entries.addToDraft')} />
+        <FoodSearch onPick={addToDraft} pickLabel={t('entries.addToDraft')} barcode={barcodeEnabled} />
         {hasDraft && (
           <ul className="m-0 flex list-none flex-col divide-y divide-divider p-0" data-testid="draft-list">
             {draft.map((item) => (
@@ -440,22 +436,6 @@ export default function EntryForm({ selectedDate, caloriesEnabled, autoCalcCalor
               </button>
             )}
 
-            {barcodeEnabled && (
-              <button
-                type="button"
-                className={actionTileClass}
-                onClick={() => setBarcodeModalOpen(true)}
-                disabled={hasDraft}
-                aria-label={t('entries.scanBarcodeLabel')}
-                title={t('entries.scanBarcodeLabel')}
-              >
-                <svg aria-hidden="true" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                  <path d="M3 5v-2h4" /><path d="M17 3h4v2" /><path d="M21 19v2h-4" /><path d="M7 21h-4v-2" />
-                  <path d="M7 8v8" /><path d="M12 8v8" /><path d="M17 8v8" /><path d="M5 8v8" /><path d="M15 8v8" /><path d="M19 8v8" />
-                </svg>
-              </button>
-            )}
-
             <button
               type="button"
               className={actionTileClass}
@@ -502,20 +482,6 @@ export default function EntryForm({ selectedDate, caloriesEnabled, autoCalcCalor
             }}
             enabledMacros={enabledMacros}
             providerName={aiProviderName}
-          />
-        </Suspense>
-      )}
-
-      {barcodeModalMounted.current && (
-        <Suspense fallback={null}>
-          <BarcodeScanModal
-            isOpen={barcodeModalOpen}
-            onClose={() => setBarcodeModalOpen(false)}
-            onResult={(result) => {
-              applyResult(result);
-              setBarcodeModalOpen(false);
-            }}
-            enabledMacros={enabledMacros}
           />
         </Suspense>
       )}

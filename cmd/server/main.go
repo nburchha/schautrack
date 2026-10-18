@@ -368,7 +368,7 @@ func main() {
 	// v1 route answer 404 instead of 500.
 	var v1Barcode http.HandlerFunc
 	if cfg.EnableBarcode {
-		v1Barcode = handler.Barcode(cfg)
+		v1Barcode = handler.Barcode(cfg, pool)
 	}
 	v1Handler := &handler.V1Handler{
 		Pool:         pool,
@@ -390,9 +390,9 @@ func main() {
 	apiV1IPLimiter := middleware.NewProblemRateLimiter(cfg.RateLimitAPI, time.Minute, cfg.TrustProxy)
 	r.With(apiV1IPLimiter.Middleware).Mount("/api/v1", v1Handler.MountAPIV1(pool))
 
-	// Barcode
+	// Barcode. A POST because a lookup writes the product to the shared catalog.
 	if cfg.EnableBarcode {
-		r.With(middleware.RequireLogin, barcodeLimiter.Middleware).Get("/api/barcode/{code}", handler.Barcode(cfg))
+		r.With(middleware.RequireLogin, barcodeLimiter.Middleware, session.CsrfProtection).Post("/api/barcode/{code}", handler.Barcode(cfg, pool))
 	}
 
 	// Admin routes

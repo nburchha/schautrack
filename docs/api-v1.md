@@ -166,7 +166,7 @@ than retrying blindly.
 | [`PATCH /todos/{id}`](#updatetodo) | `todos:write` | Change a todo |
 | [`DELETE /todos/{id}`](#deletetodo) | `todos:write` | Delete a todo |
 | [`PUT /todos/{id}/completions/{date}`](#settodocompletion) | `todos:write` | Mark a todo done or not done |
-| [`GET /barcode/{code}`](#lookupbarcode) | `foods:read` | Look up a product by barcode |
+| [`GET /barcode/{code}`](#lookupbarcode) | `foods:write` | Look up a product by barcode |
 | [`GET /saved-foods`](#listsavedfoods) | `foods:read` | List saved foods |
 | [`POST /saved-foods`](#createsavedfood) | `foods:write` | Create a saved food |
 | [`PATCH /saved-foods/{id}`](#updatesavedfood) | `foods:write` | Change a saved food |
@@ -720,9 +720,9 @@ Reusable quick-add foods.
 GET /api/v1/barcode/{code}
 ```
 
-**Scope:** `foods:read`
+**Scope:** `foods:write`
 
-Resolves an EAN-8, UPC-A, or EAN-13 barcode via OpenFoodFacts. Rate limited per account at the same rate as the app's own scanner, since it queries the same third-party database. Returns 404 when barcode lookup is disabled on the server.
+Resolves an EAN-8, UPC-A, or EAN-13 barcode via OpenFoodFacts. A barcode names one product. When it has a calorie value it is stored in the catalog (`source: off`, `source_code`: the EAN; a rescan refreshes the values) and returned as `food`, ready to use as an entry component. Because a lookup writes to the shared catalog it needs `foods:write`, although it is a `GET`. If Open Food Facts is down, a product stored by an earlier lookup is still answered (`cached: true`); otherwise the endpoint returns 502 or 504. Rate limited per account at the same rate as the app's own scanner, since it queries the same third-party database. Returns 404 when barcode lookup is disabled on the server.
 
 | Parameter | In | Required | Description |
 | --- | --- | --- | --- |
@@ -738,6 +738,7 @@ Resolves an EAN-8, UPC-A, or EAN-13 barcode via OpenFoodFacts. Rate limited per 
 | `422` | [`Problem`](#problem) — The request is well-formed but its values are rejected. `invalid_params` lists the offending fields. |
 | `429` | [`Problem`](#problem) — Too many requests. The `Retry-After` header gives the number of seconds until the window reopens. |
 | `500` | [`Problem`](#problem) — An unexpected server-side failure. |
+| `502` | [`Problem`](#problem) — The food database answered with an error. |
 | `504` | [`Problem`](#problem) — The food database did not answer in time. |
 
 ### List saved foods
@@ -1122,7 +1123,7 @@ Returns this OpenAPI description. Needs no token.
 
 ### BarcodeProduct
 
-The product as resolved from OpenFoodFacts, or a not-found result.
+The product as resolved from OpenFoodFacts. A product with calories is also stored in the catalog and returned as `food` (a Food), whose `id` can be used as the `food_id` of an entry component. `food` is absent when the product has no usable calorie value; `note` then says why: that there is none, or that Open Food Facts reports an implausible one (it is not stored). When Open Food Facts cannot be reached and an earlier lookup stored the product, the stored values are returned with `cached: true` and a `note`; `servingSize` and `servingQuantity` are null then.
 
 Free-form object; see `GET /api/v1/openapi.json` for the served shape.
 

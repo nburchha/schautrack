@@ -50,8 +50,9 @@ func (h *EntriesHandler) getAIProviderName(r *http.Request, user *model.User) *s
 	return &name
 }
 
-func (h *EntriesHandler) isBarcodeEnabled(ctx context.Context) bool {
-	result := h.Settings.GetEffectiveSetting(ctx, "enable_barcode", os.Getenv("ENABLE_BARCODE"))
+// barcodeEnabled is the effective enable_barcode setting: on unless switched off.
+func barcodeEnabled(ctx context.Context, settings *database.SettingsCache) bool {
+	result := settings.GetEffectiveSetting(ctx, "enable_barcode", os.Getenv("ENABLE_BARCODE"))
 	if result.Value == nil {
 		return true // default enabled
 	}
@@ -382,7 +383,6 @@ func (h *EntriesHandler) Dashboard(w http.ResponseWriter, r *http.Request) {
 		"range":       map[string]any{"start": oldest, "end": newest, "days": len(dayOptions), "preset": nilInt(rangePreset)},
 		"weightEntry": viewWeight, "lastWeightEntry": lastWeightEntry,
 		"hasAiEnabled": hasAiEnabled, "aiUsage": aiUsage, "aiProviderName": h.getAIProviderName(r, user),
-		"barcodeEnabled":  h.isBarcodeEnabled(r.Context()),
 		"caloriesEnabled": caloriesEnabled, "autoCalcCalories": autoCalcCalories,
 		"enabledMacros": enabledMacros, "macroGoals": macroGoals,
 		"todayMacroTotals": todayMacroTotals, "macroLabels": service.MacroLabels,

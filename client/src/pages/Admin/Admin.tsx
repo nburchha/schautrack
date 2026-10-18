@@ -5,6 +5,7 @@ import { useRequireAdmin } from '@/hooks/useAuth';
 import { getAdminData, saveAdminSettings, deleteUser, createInvite, getInvites, deleteInvite } from '@/api/admin';
 import { Button } from '@/components/ui/Button';
 import { useToastStore } from '@/stores/toastStore';
+import { useAuthStore } from '@/stores/authStore';
 import { useAutosave } from '@/hooks/useAutosave';
 import { Input } from '@/components/ui/Input';
 import { Card } from '@/components/ui/Card';
@@ -39,7 +40,11 @@ export default function Admin() {
       <AdminSettingsForm
         settings={data.settings as unknown as Record<string, SettingMeta>}
         settingsOrder={(data as unknown as { settingsOrder?: string[] }).settingsOrder ?? Object.keys(data.settings)}
-        onSave={() => queryClient.invalidateQueries({ queryKey: ['admin'] })}
+        onSave={() => {
+          void queryClient.invalidateQueries({ queryKey: ['admin'] });
+          // enable_barcode reaches the app through /api/me.
+          void useAuthStore.getState().fetchUser();
+        }}
       />
 
       <InviteManager />

@@ -6,6 +6,8 @@ interface AuthState {
   user: User | null;
   isAdmin: boolean;
   pendingLinkRequests: number;
+  /** Whether the server offers barcode lookup (enable_barcode). */
+  barcodeEnabled: boolean;
   isLoading: boolean;
   isInitialized: boolean;
   fetchUser: () => Promise<void>;
@@ -17,6 +19,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   user: null,
   isAdmin: false,
   pendingLinkRequests: 0,
+  barcodeEnabled: false,
   isLoading: true,
   isInitialized: false,
 
@@ -28,12 +31,12 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     if (!get().user) set({ isLoading: true });
     try {
       const data = await getMe();
-      set({ user: data.user, isAdmin: data.isAdmin, pendingLinkRequests: data.pendingLinkRequests || 0, isLoading: false, isInitialized: true });
+      set({ user: data.user, isAdmin: data.isAdmin, pendingLinkRequests: data.pendingLinkRequests || 0, barcodeEnabled: !!data.barcodeEnabled, isLoading: false, isInitialized: true });
     } catch {
-      set({ user: null, isAdmin: false, pendingLinkRequests: 0, isLoading: false, isInitialized: true });
+      set({ user: null, isAdmin: false, pendingLinkRequests: 0, barcodeEnabled: false, isLoading: false, isInitialized: true });
     }
   },
 
   setUser: (user, isAdmin = false) => set({ user, isAdmin, isLoading: false, isInitialized: true }),
-  clearUser: () => set({ user: null, isAdmin: false, pendingLinkRequests: 0, isLoading: false }),
+  clearUser: () => set({ user: null, isAdmin: false, pendingLinkRequests: 0, barcodeEnabled: false, isLoading: false }),
 }));

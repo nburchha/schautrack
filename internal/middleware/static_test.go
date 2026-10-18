@@ -36,7 +36,7 @@ func TestIsStaticAsset(t *testing.T) {
 		{"spa client route", http.MethodGet, "/dashboard", false},
 		{"index html not classified", http.MethodGet, "/index.html", false},
 		{"top-level overview", http.MethodGet, "/overview", false},
-		{"barcode lookup", http.MethodGet, "/api/barcode/12345", false},
+		{"barcode lookup", http.MethodPost, "/api/barcode/12345", false},
 
 		// Non-GET/HEAD methods are never static, even for asset-looking paths.
 		{"post to asset path", http.MethodPost, "/assets/index.js", false},
