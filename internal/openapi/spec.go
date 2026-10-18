@@ -641,7 +641,7 @@ func schemas() map[string]*Schema {
 				"goals": describedRef("GoalValues", "The permanent goal (Basisziel), raw: every value that is stored, "+
 					"including macros the account does not currently track. Not the goal of any particular date — use "+
 					"`GET /goals/{date}` for that. Writable via `PATCH /me`; `calories` here is `daily_goal`."),
-				"language":    nullStr("UI language, if set."),
+				"language": nullStr("UI language, if set."),
 			}, "id", "email", "timezone", "weight_unit", "daily_goal", "goals", "language"),
 			"token": object("The token that authenticated this request.", map[string]*Schema{
 				"id":         integer("Token identifier."),
