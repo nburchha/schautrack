@@ -60,7 +60,7 @@ func RecentGoals(ctx context.Context, pool *pgxpool.Pool, user *model.User, limi
 		g.GoalValues = g.GoalValues.normalised().visibleTo(mu)
 
 		k := key{}
-		for i, p := range g.GoalValues.slots() {
+		for i, p := range g.slots() {
 			if *p != nil {
 				k.v[i] = **p
 			}

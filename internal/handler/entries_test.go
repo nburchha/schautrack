@@ -173,7 +173,6 @@ func TestBuildMacroMapValues(t *testing.T) {
 func fixedGoals(calories *int, macros map[string]int) func(string) service.GoalValues {
 	v := service.GoalValues{Calories: calories}
 	for key, n := range macros {
-		n := n
 		switch key {
 		case "protein":
 			v.Protein = &n
