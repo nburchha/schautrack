@@ -245,9 +245,9 @@ returns `401` when unauthenticated.
 
 | Method | Path | Auth | Description |
 |--------|------|------|-------------|
-| GET | `/api/dashboard` | Session | Dashboard data for the current user. |
-| GET | `/overview` | Session, link-aware | Overview/aggregate view. |
-| GET | `/entries/day` | Session, link-aware | Calorie entries for a given day. |
+| GET | `/api/dashboard` | Session | Dashboard data for the current user. Day dots and the today-based goal fields are resolved against each date's Tagesziel (see [Goals per date](#goals-per-date-tagesziel)). |
+| GET | `/overview` | Session, link-aware | Overview/aggregate view; same per-date goal resolution as the dashboard. |
+| GET | `/entries/day` | Session, link-aware | Calorie entries for a given day, plus a `goal` block with the target account's Tagesziel for that date. |
 | POST | `/entries` | Session +CSRF | Create a calorie / macro / weight entry. |
 | POST | `/entries/{id}/update` | Session +CSRF | Update an entry. |
 | POST | `/entries/{id}/delete` | Session +CSRF | Delete an entry. |
@@ -261,6 +261,18 @@ returns `401` when unauthenticated.
 | POST | `/weight/upsert` | Session +CSRF | Create or update a weight entry for a date. `weight` and `body_fat` are independently optional; an omitted key leaves that column untouched. |
 | POST | `/weight/{id}/delete` | Session +CSRF | Delete a weight entry. |
 | POST | `/weight/toggle-body-fat` | Session +CSRF | Enable/disable the body-fat field for the current user. |
+
+### Daily goals (Tagesziel-Anpassung)
+
+Self only: none of these takes a user parameter, and none honours link sharing.
+Both writes broadcast an `entry-change` event to the user and linked accounts.
+Not in the OpenAPI document; the bearer-token twin is `/api/v1/goals/{date}`.
+
+| Method | Path | Auth | Description |
+|--------|------|------|-------------|
+| PUT | `/api/goals/{date}` | Session +CSRF | Set the adjustment for a date (thin body, gaps filled from the Basisziel). |
+| POST | `/api/goals/{date}/reset` | Session +CSRF | Remove the adjustment; idempotent. |
+| GET | `/api/goals/recent` | Session | Latest distinct adjustments for the sheet's quick picks. |
 
 ### Todos
 
@@ -476,6 +488,75 @@ when SMTP is configured. `409` if the account already exists.
 
 No body. Requires `X-CSRF-Token`. → `200 { "ok": true }` and clears the cookie.
 
+### Goals per date (Tagesziel)
+
+The **Basisziel** is the permanent goal (`users.macro_goals`); a
+**Tagesziel-Anpassung** replaces it for one date. The **Tagesziel** of a date is
+its adjustment if one exists, otherwise the Basisziel. Everything below resolves
+goals through that rule (`service.ResolveDayGoal` / `ResolveDayGoalRange`).
+Changes are additive: no existing field was renamed or removed.
+
+Unchanged and always the Basisziel: `GET /api/me`, `GET /api/settings`,
+`GET /api/plan`, and `user.dailyGoal` / `user.macroGoals` inside the dashboard
+payload.
+
+#### `GET /entries/day?date=YYYY-MM-DD[&user=ID]` — new `goal` block
+
+`user` needs the nutrition share (`RequireLinkAuth`), so a friend's `goal` is
+only ever returned when they share nutrition (otherwise `403 {"ok":false,…}`
+with no goal data). The block always describes the **target** account, never the
+viewer: its macros, modes, threshold and adjustments.
+
+```json
+{
+  "ok": true,
+  "date": "2026-08-05",
+  "entries": [],
+  "goal": {
+    "date": "2026-08-05",
+    "adjusted": true,
+    "reason": "Lauf 25 km",
+    "calories": 3100,
+    "baseCalories": 2400,
+    "macroGoals": { "protein": 150, "carbs": 480 },
+    "enabledMacros": ["protein", "carbs"],
+    "macroModes": { "calories": "limit", "protein": "target", "carbs": "target", "fat": "limit", "fiber": "target", "sugar": "limit" },
+    "goalThreshold": 10,
+    "caloriesEnabled": true
+  }
+}
+```
+
+| Field | Type | Meaning |
+|-------|------|---------|
+| `date` | string | The requested date. |
+| `adjusted` | bool | `true` when a Tagesziel-Anpassung exists for the date. |
+| `reason` | string \| null | The adjustment's reason; `null` when unadjusted or none given. |
+| `calories` | int \| null | Calorie goal of the Tagesziel; `null` = no goal (also when calories are hidden for the account). |
+| `baseCalories` | int \| null | The Basisziel's calories, only on an adjusted day (else `null`). |
+| `macroGoals` | object | Goal in grams per **enabled** macro that has one (`protein`, `carbs`, `fat`, `fiber`, `sugar`). Missing key = no goal. `{}` when none. |
+| `enabledMacros` | string[] | Macros the account tracks (same set `entries` carries). `[]` when none. |
+| `macroModes` | object | `limit` or `target` for `calories` and all five macros. |
+| `goalThreshold` | int | Percent tolerance for the status colours (0–99). |
+| `caloriesEnabled` | bool | `false` when the account hides calories. |
+
+A macro disabled later is simply absent from `macroGoals`; its adjusted value is
+kept and reappears if the macro is enabled again.
+
+#### `GET /api/dashboard` and `GET /overview`
+
+- `dailyStats[].status` (the day dots, also for each friend's card in
+  `sharedViews[]`) is computed against the Tagesziel of **each date**.
+- The today-based fields `dailyGoal`, `goalStatus`, `goalDelta`, `calorieStatus`,
+  `macroStatuses` and the top-level `macroGoals` keep their today semantics but
+  are resolved against **today's** Tagesziel (also when the requested range ends
+  before today). `sharedViews[].dailyGoal` is the same, per account.
+- A friend's adjustments are looked up only when they share nutrition. Without
+  the share, the friend's `dailyStats` is `[]` and `dailyGoal` /
+  `goalThreshold` are `null`, as before.
+- The selected day's goal for the Today panel comes from
+  `GET /entries/day` (`goal` above), not from these fields.
+
 ### `POST /entries`
 
 Request (all fields optional but at least one of calories/macros/weight required):
@@ -536,6 +617,79 @@ one of the two must be present.
 `400 { "ok": false, "error": "Log a weight for that date first" }` when the
 request carries no `weight` and the date has no entry yet — there is nothing to
 attach a body-fat reading to. `400 "Nothing to save"` when both keys are absent.
+
+### `PUT /api/goals/{date}`
+
+`{date}` is `YYYY-MM-DD`; any date, past or future.
+
+```json
+{ "calories": 3100, "carbs": 480, "reason": "Lauf 25 km" }
+```
+
+Every key is optional but at least one must be present. Missing values are
+filled from the current Basisziel at save time; the stored row is always a
+complete snapshot, and a later Basisziel change does not touch it. Replacing is
+a full replace (gaps come from the Basisziel again, never from the previous
+adjustment), so repeating a request is harmless. `calories` is `1..9999`,
+macros `0..9999` (0 = no goal), macros must be enabled for the account,
+`reason` is trimmed and at most 120 characters (empty = none). Same rules and
+service function as v1.
+
+→ `200`:
+
+```json
+{
+  "ok": true,
+  "goal": {
+    "date": "2026-08-05",
+    "adjusted": true,
+    "reason": "Lauf 25 km",
+    "calories": 3100, "protein": 150, "carbs": 480, "fat": 70, "fiber": 30, "sugar": 50,
+    "base": { "calories": 2400, "protein": 150, "carbs": 300, "fat": 70, "fiber": 30, "sugar": 50 },
+    "updated_at": "2026-08-04T18:21:07.123456Z"
+  }
+}
+```
+
+Value keys are `null` where there is no goal or the macro is disabled. `base`
+is the Basisziel the day differs from. `400 { "ok": false, "error": "carbs: …" }`
+for validation (the field is named at the start of the message),
+`"Invalid date"` for a bad date, `"Invalid request."` for a malformed body.
+
+### `POST /api/goals/{date}/reset`
+
+No body. Removes the date's adjustment; resetting a day that has none is not an
+error. → `200` with the Tagesziel now in force:
+
+```json
+{
+  "ok": true,
+  "goal": {
+    "date": "2026-08-05", "adjusted": false, "reason": null,
+    "calories": 2400, "protein": 150, "carbs": 300, "fat": 70, "fiber": 30, "sugar": 50,
+    "base": null, "updated_at": null
+  }
+}
+```
+
+### `GET /api/goals/recent`
+
+Up to 8 distinct adjustments (same reason and values, whatever date they were
+for), most recently written first. Values of macros the account does not track
+are `null`.
+
+```json
+{
+  "ok": true,
+  "recent": [
+    {
+      "reason": "Lauf 25 km",
+      "calories": 3100, "protein": 150, "carbs": 480, "fat": 70, "fiber": 30, "sugar": 50,
+      "used_at": "2026-08-04T18:21:07.123456Z"
+    }
+  ]
+}
+```
 
 ---
 

@@ -274,6 +274,10 @@ func main() {
 	r.With(middleware.RequireLogin, session.CsrfProtection).Post("/api/plan/goal/apply-budget", planHandler.ApplyBudget)
 	r.With(middleware.RequireLogin, session.CsrfProtection).Post("/api/plan/goal/abandon", planHandler.AbandonGoal)
 
+	// Daily goal adjustments (ADR 0007): Mount adds /api/goals/{date} (PUT),
+	// /api/goals/{date}/reset and /api/goals/recent with login and CSRF.
+	(&handler.GoalsHandler{Pool: pool, Broker: sseBroker}).Mount(r)
+
 	// Settings routes
 	settingsHandler := &handler.SettingsHandler{Pool: pool, Broker: sseBroker, AIKeyEncryptSecret: cfg.AIKeyEncryptSecret, TrustProxy: cfg.TrustProxy}
 	r.With(middleware.RequireLogin, session.CsrfProtection).Post("/settings/preferences", settingsHandler.Preferences)

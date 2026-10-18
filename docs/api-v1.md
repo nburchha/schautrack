@@ -218,7 +218,7 @@ PATCH /api/v1/me
 
 **Scope:** `settings:write`
 
-Only settings that affect how the rest of the API behaves are writable. Authentication settings (password, 2FA, passkeys, email) are deliberately NOT — those are step-up gated in the app, and step-up is meaningless for a bearer token, so allowing them would turn one leaked token into account takeover.
+Only settings that affect how the rest of the API behaves are writable. Authentication settings (password, 2FA, passkeys, email) are deliberately NOT — those are step-up gated in the app, and step-up is meaningless for a bearer token, so allowing them would turn one leaked token into account takeover. Changing the macro `goals` additionally requires `goals:write` (checked on the request body, answered `403` if missing).
 
 **Request body** (required): [`SettingsPatch`](#settingspatch)
 
@@ -1584,6 +1584,7 @@ The account this token belongs to.
 | --- | --- | --- | --- |
 | `daily_goal` | `integer` or `null` | yes | Effective daily calorie goal (the app's calorie macro goal, else the legacy value), if set. |
 | `email` | `string` | yes | Account email. |
+| `goals` | [`GoalValues`](#goalvalues) | yes | The permanent goal (Basisziel), raw: every value that is stored, including macros the account does not currently track. Not the goal of any particular date — use `GET /goals/{date}` for that. Writable via `PATCH /me`; `calories` here is `daily_goal`. |
 | `id` | `integer` | yes | Account identifier. |
 | `language` | `string` or `null` | yes | UI language, if set. |
 | `timezone` | `string` | yes | IANA time zone. Determines what `today` and every bare date mean. |
@@ -1771,9 +1772,22 @@ Account settings to change. Omit a field to leave it alone.
 | Field | Type | Required | Description |
 | --- | --- | --- | --- |
 | `daily_goal` | `integer` or `null` |  | Daily calorie goal (stored as the app's calorie macro goal). `null` clears it. |
+| `goals` | `object` |  | Macro goals of the permanent goal (Basisziel). Each key you send is merged into the stored goal; keys you leave out are untouched, and the rest of the goal (including the calorie goal and the limit/target modes) is never replaced. `null` or `0` clears a goal. Calories are set with `daily_goal`. A macro the account does not track is rejected with `422` (clearing it is allowed). Requires the `goals:write` scope in addition to `settings:write`; a token without it gets `403` when this object carries any key, and can still set everything else. |
 | `language` | `string` or `null` |  | UI language: one of en, de, es, fr, it, nl, pl, pt. `null` restores automatic. |
 | `timezone` | `string` |  | IANA time zone name, e.g. `Europe/Berlin`. Decides what every bare date means. |
 | `weight_unit` | `kg` \| `lb` |  | Display unit. Changing it does NOT convert stored readings — they are kept as entered. |
+
+#### goals
+
+Macro goals of the permanent goal (Basisziel). Each key you send is merged into the stored goal; keys you leave out are untouched, and the rest of the goal (including the calorie goal and the limit/target modes) is never replaced. `null` or `0` clears a goal. Calories are set with `daily_goal`. A macro the account does not track is rejected with `422` (clearing it is allowed). Requires the `goals:write` scope in addition to `settings:write`; a token without it gets `403` when this object carries any key, and can still set everything else.
+
+| Field | Type | Required | Description |
+| --- | --- | --- | --- |
+| `carbs` | `integer` or `null` |  | Carbohydrate goal in grams. |
+| `fat` | `integer` or `null` |  | Fat goal in grams. |
+| `fiber` | `integer` or `null` |  | Fiber goal in grams. |
+| `protein` | `integer` or `null` |  | Protein goal in grams. |
+| `sugar` | `integer` or `null` |  | Sugar goal in grams. |
 
 ### Todo
 

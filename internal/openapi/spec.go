@@ -638,8 +638,11 @@ func schemas() map[string]*Schema {
 				"timezone":    str("IANA time zone. Determines what `today` and every bare date mean."),
 				"weight_unit": {Type: "string", Enum: []any{"kg", "lb"}, Description: "The unit weight readings are stored in."},
 				"daily_goal":  nullInt("Effective daily calorie goal (the app's calorie macro goal, else the legacy value), if set."),
-				"language":    nullStr("UI language, if set."),
-			}, "id", "email", "timezone", "weight_unit", "daily_goal", "language"),
+				"goals": describedRef("GoalValues", "The permanent goal (Basisziel), raw: every value that is stored, "+
+					"including macros the account does not currently track. Not the goal of any particular date — use "+
+					"`GET /goals/{date}` for that. Writable via `PATCH /me`; `calories` here is `daily_goal`."),
+				"language": nullStr("UI language, if set."),
+			}, "id", "email", "timezone", "weight_unit", "daily_goal", "goals", "language"),
 			"token": object("The token that authenticated this request.", map[string]*Schema{
 				"id":         integer("Token identifier."),
 				"name":       str("The label given when it was created."),
@@ -715,6 +718,19 @@ func schemas() map[string]*Schema {
 			"timezone":    str("IANA time zone name, e.g. `Europe/Berlin`. Decides what every bare date means."),
 			"weight_unit": {Type: "string", Enum: []any{"kg", "lb"}, Description: "Display unit. Changing it does NOT convert stored readings — they are kept as entered."},
 			"language":    nullStr("UI language: one of en, de, es, fr, it, nl, pl, pt. `null` restores automatic."),
+			"goals": object("Macro goals of the permanent goal (Basisziel). Each key you send is merged into the stored "+
+				"goal; keys you leave out are untouched, and the rest of the goal (including the calorie goal and the "+
+				"limit/target modes) is never replaced. `null` or `0` clears a goal. Calories are set with `daily_goal`. "+
+				"A macro the account does not track is rejected with `422` (clearing it is allowed). "+
+				"Requires the `goals:write` scope in addition to `settings:write`; a token without it gets `403` "+
+				"when this object carries any key, and can still set everything else.",
+				map[string]*Schema{
+					"protein": withRange(nullInt("Protein goal in grams."), 0, 9999),
+					"carbs":   withRange(nullInt("Carbohydrate goal in grams."), 0, 9999),
+					"fat":     withRange(nullInt("Fat goal in grams."), 0, 9999),
+					"fiber":   withRange(nullInt("Fiber goal in grams."), 0, 9999),
+					"sugar":   withRange(nullInt("Sugar goal in grams."), 0, 9999),
+				}),
 		}),
 
 		"EstimateInput": object("A food photo to estimate.", map[string]*Schema{
@@ -1033,7 +1049,8 @@ func paths() map[string]*PathItem {
 				Description: "Only settings that affect how the rest of the API behaves are writable. " +
 					"Authentication settings (password, 2FA, passkeys, email) are deliberately NOT — those are " +
 					"step-up gated in the app, and step-up is meaningless for a bearer token, so allowing them " +
-					"would turn one leaked token into account takeover.",
+					"would turn one leaked token into account takeover. Changing the macro `goals` additionally " +
+					"requires `goals:write` (checked on the request body, answered `403` if missing).",
 				Tags:        []string{"Account"},
 				Scope:       service.ScopeSettingsWrite,
 				Security:    []SecurityRequirement{{"bearerAuth": {service.ScopeSettingsWrite}}},
@@ -1219,7 +1236,7 @@ func paths() map[string]*PathItem {
 			Delete: &Operation{
 				OperationID: "deleteGoal", Summary: "Reset a date to the permanent goal",
 				Description: "Removes the day's adjustment. Answers 204 also when the date had none.",
-				Tags: []string{"Goals"}, Scope: service.ScopeGoalsWrite,
+				Tags:        []string{"Goals"}, Scope: service.ScopeGoalsWrite,
 				Security:   []SecurityRequirement{{"bearerAuth": {service.ScopeGoalsWrite}}},
 				Parameters: []Parameter{dateParam},
 				Responses: merge(map[string]*Response{

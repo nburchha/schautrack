@@ -112,6 +112,14 @@ func baseGoalValues(u MacroUser) GoalValues {
 	return v
 }
 
+// BaseGoal is the raw Basisziel of user: every key, enabled or not. Unlike
+// ResolveDayGoal it is not filtered by the macros the account tracks, because
+// its consumers (GET /me) are the ones who write the Basisziel and must see
+// what a later PATCH would merge into.
+func BaseGoal(user *model.User) GoalValues {
+	return baseGoalValues(userMacros(user))
+}
+
 // visibleTo hides what the account does not track. Applied at read time, never
 // at write time, so toggling a macro in Settings does not destroy history.
 func (v GoalValues) visibleTo(u MacroUser) GoalValues {
@@ -144,33 +152,116 @@ func userMacros(user *model.User) MacroUser {
 	return ParseMacroUser(user.MacrosEnabled, user.MacroGoals, user.DailyGoal, user.GoalThreshold)
 }
 
+// MacroMap is the macro goals in the shape the status helpers take: only macros
+// that have a goal. Visibility filtering has already happened, so for a
+// resolved day this equals GetMacroGoals of the Basisziel.
+func (v GoalValues) MacroMap() map[string]int {
+	out := map[string]int{}
+	for i, key := range MacroKeys {
+		if p := *v.slots()[i+1]; p != nil {
+			out[key] = *p
+		}
+	}
+	return out
+}
+
+// storedAdjustment is one goal_adjustments row.
+type storedAdjustment struct {
+	GoalValues
+	reason    *string
+	updatedAt time.Time
+}
+
+// dayGoalFor is the single rule that turns an optional stored adjustment into a
+// Tagesziel: the adjustment if present, otherwise the Basisziel. Both the
+// single-date and the range resolver go through it.
+func dayGoalFor(mu MacroUser, date string, adj *storedAdjustment) *DayGoal {
+	base := baseGoalValues(mu).visibleTo(mu)
+	if adj == nil {
+		return &DayGoal{Date: date, GoalValues: base}
+	}
+	return &DayGoal{
+		Date: date, Adjusted: true, Reason: adj.reason,
+		GoalValues: adj.GoalValues.normalised().visibleTo(mu),
+		Base:       &base,
+		UpdatedAt:  &adj.updatedAt,
+	}
+}
+
+const adjustmentColumns = `calories, protein, carbs, fat, fiber, sugar, reason, updated_at`
+
+func (a *storedAdjustment) scan(row pgx.Row) error {
+	return row.Scan(&a.Calories, &a.Protein, &a.Carbs, &a.Fat, &a.Fiber, &a.Sugar, &a.reason, &a.updatedAt)
+}
+
 // ResolveDayGoal returns the Tagesziel of user on date (YYYY-MM-DD): the
 // stored adjustment if there is one, otherwise the Basisziel. Values are
 // filtered by the macros enabled at read time. It never fails for want of a
 // Basisziel; an account without one resolves to all-nil values.
 func ResolveDayGoal(ctx context.Context, q Querier, user *model.User, date string) (*DayGoal, error) {
 	mu := userMacros(user)
-	base := baseGoalValues(mu).visibleTo(mu)
-
-	var adj GoalValues
-	var reason *string
-	var updatedAt time.Time
-	err := q.QueryRow(ctx, `
-		SELECT calories, protein, carbs, fat, fiber, sugar, reason, updated_at
-		FROM goal_adjustments WHERE user_id = $1 AND goal_date = $2`,
-		user.ID, date).Scan(&adj.Calories, &adj.Protein, &adj.Carbs, &adj.Fat, &adj.Fiber, &adj.Sugar, &reason, &updatedAt)
+	var adj storedAdjustment
+	err := adj.scan(q.QueryRow(ctx,
+		`SELECT `+adjustmentColumns+` FROM goal_adjustments WHERE user_id = $1 AND goal_date = $2`,
+		user.ID, date))
 	if errors.Is(err, pgx.ErrNoRows) {
-		return &DayGoal{Date: date, GoalValues: base}, nil
+		return dayGoalFor(mu, date, nil), nil
 	}
 	if err != nil {
 		return nil, err
 	}
-	return &DayGoal{
-		Date: date, Adjusted: true, Reason: reason,
-		GoalValues: adj.normalised().visibleTo(mu),
-		Base:       &base,
-		UpdatedAt:  &updatedAt,
-	}, nil
+	return dayGoalFor(mu, date, &adj), nil
+}
+
+// RowsQuerier is the multi-row counterpart of Querier (pool or tx).
+type RowsQuerier interface {
+	Query(ctx context.Context, sql string, args ...any) (pgx.Rows, error)
+}
+
+// DayGoals resolves the Tagesziel for every date of a range after one query.
+// Build it with ResolveDayGoalRange.
+type DayGoals struct {
+	mu          MacroUser
+	adjustments map[string]*storedAdjustment
+}
+
+// On returns the Tagesziel of date. Dates outside the loaded range resolve to
+// the Basisziel, so callers must load the whole span they ask about.
+func (g *DayGoals) On(date string) *DayGoal {
+	return dayGoalFor(g.mu, date, g.adjustments[date])
+}
+
+// ValuesOn is On(date).GoalValues, the shape the day-status calculation takes.
+func (g *DayGoals) ValuesOn(date string) GoalValues { return g.On(date).GoalValues }
+
+// ResolveDayGoalRange loads the adjustments of userID within [oldest, newest]
+// (inclusive, YYYY-MM-DD) in one query and returns a resolver for those dates.
+// mu carries the Basisziel and the enabled macros; pass a linked user's
+// MacroUser for a friend. Callers must only do this for data they may show:
+// resolving a friend's goals is nutrition data.
+func ResolveDayGoalRange(ctx context.Context, q RowsQuerier, userID int, mu MacroUser, oldest, newest string) (*DayGoals, error) {
+	rows, err := q.Query(ctx, `
+		SELECT goal_date, `+adjustmentColumns+`
+		FROM goal_adjustments
+		WHERE user_id = $1 AND goal_date BETWEEN $2 AND $3`, userID, oldest, newest)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	out := &DayGoals{mu: mu, adjustments: map[string]*storedAdjustment{}}
+	for rows.Next() {
+		var date string
+		var a storedAdjustment
+		if err := rows.Scan(&date, &a.Calories, &a.Protein, &a.Carbs, &a.Fat, &a.Fiber, &a.Sugar, &a.reason, &a.updatedAt); err != nil {
+			return nil, err
+		}
+		out.adjustments[date] = &a
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return out, nil
 }
 
 // validateGoalInput checks a write against the account's settings and returns
@@ -236,7 +327,7 @@ func SetDayGoal(ctx context.Context, pool *pgxpool.Pool, user *model.User, date 
 	}
 
 	vals := baseGoalValues(mu)
-	for i, p := range in.GoalValues.slots() {
+	for i, p := range in.slots() {
 		if *p != nil {
 			*vals.slots()[i] = *p
 		}
