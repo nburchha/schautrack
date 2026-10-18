@@ -452,7 +452,7 @@ func schemas() map[string]*Schema {
 		}, "data"),
 
 		"GoalValues": object("A goal: calories and the five macros. `null` where no goal is set or the account does not track it.",
-			goalValueProps(), goalKeys...),
+			goalValueProps(), service.GoalKeys...),
 		"Goal": object("The goal that applies on one date (the Tagesziel): the day's adjustment when there is one, otherwise the permanent goal. "+
 			"Only calories and macros the account tracks are reported; everything else is `null`, as is any value with no goal set.",
 			mergeProps(map[string]*Schema{
@@ -463,7 +463,7 @@ func schemas() map[string]*Schema {
 					"`null` unless `adjusted`."),
 				"updated_at": nullable(dateTime("When the adjustment was last written (UTC). `null` when unadjusted.")),
 			}, goalValueProps()),
-			append([]string{"date", "adjusted", "reason", "base", "updated_at"}, goalKeys...)...),
+			append([]string{"date", "adjusted", "reason", "base", "updated_at"}, service.GoalKeys...)...),
 		"GoalInput": object("An adjustment for one date. Send only what differs: every number you leave out is "+
 			"filled from the permanent goal as it is at the moment of the request, and is then frozen — a later "+
 			"change to the permanent goal does not touch an adjusted day. At least one field is required.",
@@ -725,11 +725,11 @@ func schemas() map[string]*Schema {
 				"Requires the `goals:write` scope in addition to `settings:write`; a token without it gets `403` "+
 				"when this object carries any key, and can still set everything else.",
 				map[string]*Schema{
-					"protein": withRange(nullInt("Protein goal in grams."), 0, 9999),
-					"carbs":   withRange(nullInt("Carbohydrate goal in grams."), 0, 9999),
-					"fat":     withRange(nullInt("Fat goal in grams."), 0, 9999),
-					"fiber":   withRange(nullInt("Fiber goal in grams."), 0, 9999),
-					"sugar":   withRange(nullInt("Sugar goal in grams."), 0, 9999),
+					"protein": withRange(nullInt("Protein goal in grams."), 0, service.MaxGoalMacro),
+					"carbs":   withRange(nullInt("Carbohydrate goal in grams."), 0, service.MaxGoalMacro),
+					"fat":     withRange(nullInt("Fat goal in grams."), 0, service.MaxGoalMacro),
+					"fiber":   withRange(nullInt("Fiber goal in grams."), 0, service.MaxGoalMacro),
+					"sugar":   withRange(nullInt("Sugar goal in grams."), 0, service.MaxGoalMacro),
 				}),
 		}),
 
@@ -1600,9 +1600,6 @@ func merge(primary, fallback map[string]*Response) map[string]*Response {
 	}
 	return out
 }
-
-// goalKeys are the six goal fields, in presentation order.
-var goalKeys = []string{"calories", "protein", "carbs", "fat", "fiber", "sugar"}
 
 var goalReasonMax = service.MaxGoalReasonLen
 

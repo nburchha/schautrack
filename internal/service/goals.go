@@ -82,17 +82,70 @@ func (e *GoalValidationError) Error() string {
 	return fmt.Sprintf("%s: %s", e.Field, e.Reason)
 }
 
-// goalKeys fixes the order of the six goal fields so loops over them stay in
-// step with GoalValues.slots.
-var goalKeys = append([]string{"calories"}, MacroKeys...)
+// GoalKeys fixes the order of the six goal fields: calories, then MacroKeys.
+var GoalKeys = append([]string{"calories"}, MacroKeys...)
 
-func (v *GoalValues) slots() []**int {
-	return []**int{&v.Calories, &v.Protein, &v.Carbs, &v.Fat, &v.Fiber, &v.Sugar}
+// GoalSlot pairs a goal field's key with a pointer to its storage in a
+// GoalValues, so a loop over the fields cannot drift out of step with the keys.
+type GoalSlot struct {
+	Key string
+	Dst **int
 }
 
-func caloriesVisible(u MacroUser) bool {
+// Slot returns the storage of the field named key (one of GoalKeys), or nil for
+// an unknown key. Lookups are by name, never by position.
+func (v *GoalValues) Slot(key string) **int {
+	switch key {
+	case "calories":
+		return &v.Calories
+	case "protein":
+		return &v.Protein
+	case "carbs":
+		return &v.Carbs
+	case "fat":
+		return &v.Fat
+	case "fiber":
+		return &v.Fiber
+	case "sugar":
+		return &v.Sugar
+	}
+	return nil
+}
+
+// Slots lists every field in GoalKeys order.
+func (v *GoalValues) Slots() []GoalSlot {
+	out := make([]GoalSlot, 0, len(GoalKeys))
+	for _, k := range GoalKeys {
+		out = append(out, GoalSlot{Key: k, Dst: v.Slot(k)})
+	}
+	return out
+}
+
+// GoalBounds is the inclusive range a goal field accepts: calories 1..
+// MaxGoalCalories, macros 0..MaxGoalMacro (0 meaning "no goal"). It is the one
+// place the bounds are decided; the API, the session routes, PATCH /me and
+// import all go through it.
+func GoalBounds(key string) (lo, hi int) {
+	if key == "calories" {
+		return 1, MaxGoalCalories
+	}
+	return 0, MaxGoalMacro
+}
+
+// CaloriesEnabled reports whether the account tracks calories. Unset counts as
+// enabled; only an explicit false hides them.
+func CaloriesEnabled(u MacroUser) bool {
 	v, ok := u.MacrosEnabled["calories"]
 	return !ok || v != false
+}
+
+// EnabledMacroSet is GetEnabledMacros as a set, for membership checks.
+func EnabledMacroSet(u MacroUser) map[string]bool {
+	out := map[string]bool{}
+	for _, k := range GetEnabledMacros(u) {
+		out[k] = true
+	}
+	return out
 }
 
 // baseGoalValues reads the raw Basisziel: every key, enabled or not, with 0
@@ -104,9 +157,9 @@ func baseGoalValues(u MacroUser) GoalValues {
 		n := *c
 		v.Calories = &n
 	}
-	for i, key := range MacroKeys {
+	for _, key := range MacroKeys {
 		if n := getGoalValue(u.MacroGoals, key); n > 0 {
-			*v.slots()[i+1] = &n
+			*v.Slot(key) = &n
 		}
 	}
 	return v
@@ -123,16 +176,13 @@ func BaseGoal(user *model.User) GoalValues {
 // visibleTo hides what the account does not track. Applied at read time, never
 // at write time, so toggling a macro in Settings does not destroy history.
 func (v GoalValues) visibleTo(u MacroUser) GoalValues {
-	if !caloriesVisible(u) {
+	if !CaloriesEnabled(u) {
 		v.Calories = nil
 	}
-	enabled := map[string]bool{}
-	for _, k := range GetEnabledMacros(u) {
-		enabled[k] = true
-	}
-	for i, key := range MacroKeys {
+	enabled := EnabledMacroSet(u)
+	for _, key := range MacroKeys {
 		if !enabled[key] {
-			*v.slots()[i+1] = nil
+			*v.Slot(key) = nil
 		}
 	}
 	return v
@@ -140,9 +190,9 @@ func (v GoalValues) visibleTo(u MacroUser) GoalValues {
 
 // normalised turns stored zeros into nil: 0 means "no goal", as in the Basisziel.
 func (v GoalValues) normalised() GoalValues {
-	for _, p := range v.slots() {
-		if *p != nil && **p <= 0 {
-			*p = nil
+	for _, s := range v.Slots() {
+		if *s.Dst != nil && **s.Dst <= 0 {
+			*s.Dst = nil
 		}
 	}
 	return v
@@ -157,8 +207,8 @@ func userMacros(user *model.User) MacroUser {
 // resolved day this equals GetMacroGoals of the Basisziel.
 func (v GoalValues) MacroMap() map[string]int {
 	out := map[string]int{}
-	for i, key := range MacroKeys {
-		if p := *v.slots()[i+1]; p != nil {
+	for _, key := range MacroKeys {
+		if p := *v.Slot(key); p != nil {
 			out[key] = *p
 		}
 	}
@@ -267,28 +317,24 @@ func ResolveDayGoalRange(ctx context.Context, q RowsQuerier, userID int, mu Macr
 // validateGoalInput checks a write against the account's settings and returns
 // the cleaned reason.
 func validateGoalInput(mu MacroUser, in GoalInput) (*string, error) {
-	enabled := map[string]bool{}
-	for _, k := range GetEnabledMacros(mu) {
-		enabled[k] = true
-	}
+	enabled := EnabledMacroSet(mu)
 	given := in.GoalValues
 	sent := false
-	for i, p := range given.slots() {
-		if *p == nil {
+	for _, slot := range given.Slots() {
+		if *slot.Dst == nil {
 			continue
 		}
 		sent = true
-		key := goalKeys[i]
-		lo, hi := 0, MaxGoalMacro
+		key := slot.Key
 		if key == "calories" {
-			lo, hi = 1, MaxGoalCalories
-			if !caloriesVisible(mu) {
+			if !CaloriesEnabled(mu) {
 				return nil, &GoalValidationError{Field: key, Reason: "calories are hidden for this account"}
 			}
 		} else if !enabled[key] {
 			return nil, &GoalValidationError{Field: key, Reason: "this macro is not enabled for the account"}
 		}
-		if n := **p; n < lo || n > hi {
+		lo, hi := GoalBounds(key)
+		if n := **slot.Dst; n < lo || n > hi {
 			return nil, &GoalValidationError{Field: key, Reason: fmt.Sprintf("must be a whole number from %d to %d", lo, hi)}
 		}
 	}
@@ -327,9 +373,9 @@ func SetDayGoal(ctx context.Context, pool *pgxpool.Pool, user *model.User, date 
 	}
 
 	vals := baseGoalValues(mu)
-	for i, p := range in.slots() {
-		if *p != nil {
-			*vals.slots()[i] = *p
+	for _, slot := range in.Slots() {
+		if *slot.Dst != nil {
+			*vals.Slot(slot.Key) = *slot.Dst
 		}
 	}
 

@@ -158,9 +158,9 @@ func (h *EntriesHandler) Export(w http.ResponseWriter, r *http.Request) {
 			fmt.Fprint(w, ",")
 		}
 		row := map[string]any{"date": date}
-		for _, slot := range goalSlots(&g) {
-			if *slot.dst != nil {
-				row[slot.key] = **slot.dst
+		for _, slot := range g.Slots() {
+			if *slot.Dst != nil {
+				row[slot.Key] = **slot.Dst
 			}
 		}
 		if reason != nil {
@@ -497,21 +497,6 @@ func parseImportData(parsed map[string]any) importData {
 	}
 }
 
-// goalSlot pairs a goal field's JSON key with its destination, in the order the
-// export writes them. Local to the handler: service.GoalValues keeps its own
-// slot list private, and a second copy here is cheaper than widening it.
-type goalSlot struct {
-	key string
-	dst **int
-}
-
-func goalSlots(g *service.GoalValues) []goalSlot {
-	return []goalSlot{
-		{"calories", &g.Calories}, {"protein", &g.Protein}, {"carbs", &g.Carbs},
-		{"fat", &g.Fat}, {"fiber", &g.Fiber}, {"sugar", &g.Sugar},
-	}
-}
-
 // parseImportAdjustments validates the "goal_adjustments" array. A missing key
 // or a non-array value yields nothing, so files from before the feature import
 // as before. Rows are kept in file order; a repeated date keeps its first row
@@ -550,17 +535,14 @@ func parseImportAdjustments(raw any, rec *importData) (kept []importAdjustment, 
 		var adj importAdjustment
 		adj.date = date
 		valid := true
-		for _, slot := range goalSlots(&adj.goal) {
-			key, p := slot.key, slot.dst
+		for _, slot := range adj.goal.Slots() {
+			key, p := slot.Key, slot.Dst
 			v, present := row[key]
 			if !present || v == nil {
 				continue
 			}
 			f, isNum := v.(float64)
-			lo, hi := 0, service.MaxGoalMacro
-			if key == "calories" {
-				lo, hi = 1, service.MaxGoalCalories
-			}
+			lo, hi := service.GoalBounds(key)
 			if !isNum || f != math.Trunc(f) || f < float64(lo) || f > float64(hi) {
 				valid = false
 				break

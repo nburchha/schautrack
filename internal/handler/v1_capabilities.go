@@ -46,25 +46,24 @@ type v1GoalsPatch struct {
 	Sugar   Optional[int] `json:"sugar"`
 }
 
-// fields pairs each macro key with its patch value, in service.MacroKeys order.
-func (g *v1GoalsPatch) fields() []struct {
+// goalPatchField is one macro key of a goals PATCH with the value sent for it.
+type goalPatchField struct {
 	Key string
 	Val Optional[int]
-} {
+}
+
+// fields lists the macro keys present in the patch, in service.MacroKeys order.
+func (g *v1GoalsPatch) fields() []goalPatchField {
 	if g == nil {
 		return nil
 	}
-	all := []Optional[int]{g.Protein, g.Carbs, g.Fat, g.Fiber, g.Sugar}
-	var out []struct {
-		Key string
-		Val Optional[int]
+	byKey := map[string]Optional[int]{
+		"protein": g.Protein, "carbs": g.Carbs, "fat": g.Fat, "fiber": g.Fiber, "sugar": g.Sugar,
 	}
-	for i, key := range service.MacroKeys {
-		if all[i].Set {
-			out = append(out, struct {
-				Key string
-				Val Optional[int]
-			}{key, all[i]})
+	var out []goalPatchField
+	for _, key := range service.MacroKeys {
+		if v := byKey[key]; v.Set {
+			out = append(out, goalPatchField{key, v})
 		}
 	}
 	return out
@@ -132,18 +131,15 @@ func (h *V1Handler) UpdateMeV1(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		user := v1User(r)
-		enabled := map[string]bool{}
-		for _, k := range service.GetEnabledMacros(service.ParseMacroUser(user.MacrosEnabled, user.MacroGoals, user.DailyGoal, user.GoalThreshold)) {
-			enabled[k] = true
-		}
+		enabled := service.EnabledMacroSet(service.ParseMacroUser(user.MacrosEnabled, user.MacroGoals, user.DailyGoal, user.GoalThreshold))
 		for _, f := range macros {
 			name := "goals." + f.Key
 			if f.Val.Value != nil {
-				if v := *f.Val.Value; v < 0 || v > service.MaxGoalMacro {
+				if lo, hi := service.GoalBounds(f.Key); *f.Val.Value < lo || *f.Val.Value > hi {
 					apierr.Write(w, r, apierr.Unprocessable("The goal value is not usable.",
 						apierr.InvalidParam{
 							Name:   name,
-							Reason: fmt.Sprintf("must be a whole number from 0 to %d (0 means no goal)", service.MaxGoalMacro),
+							Reason: fmt.Sprintf("must be a whole number from %d to %d (0 means no goal)", lo, hi),
 						}))
 					return
 				}

@@ -57,13 +57,7 @@ func (h *GoalsHandler) Put(w http.ResponseWriter, r *http.Request) {
 	}
 
 	user := middleware.GetCurrentUser(r)
-	g, _, err := service.SetDayGoal(r.Context(), h.Pool, user, date, service.GoalInput{
-		GoalValues: service.GoalValues{
-			Calories: in.Calories, Protein: in.Protein, Carbs: in.Carbs,
-			Fat: in.Fat, Fiber: in.Fiber, Sugar: in.Sugar,
-		},
-		Reason: in.Reason,
-	})
+	g, _, err := service.SetDayGoal(r.Context(), h.Pool, user, date, in.toService())
 	var verr *service.GoalValidationError
 	if errors.As(err, &verr) {
 		ErrorJSON(w, http.StatusBadRequest, verr.Error())

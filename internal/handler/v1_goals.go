@@ -62,6 +62,16 @@ type v1GoalInput struct {
 	Reason   *string `json:"reason"`
 }
 
+func (in v1GoalInput) toService() service.GoalInput {
+	return service.GoalInput{
+		GoalValues: service.GoalValues{
+			Calories: in.Calories, Protein: in.Protein, Carbs: in.Carbs,
+			Fat: in.Fat, Fiber: in.Fiber, Sugar: in.Sugar,
+		},
+		Reason: in.Reason,
+	}
+}
+
 // GetGoalV1 handles GET /api/v1/goals/{date}.
 func (h *V1Handler) GetGoalV1(w http.ResponseWriter, r *http.Request) {
 	date, prob := pathDate(r)
@@ -113,13 +123,7 @@ func (h *V1Handler) PutGoalV1(w http.ResponseWriter, r *http.Request) {
 	}
 
 	user := v1User(r)
-	g, created, err := service.SetDayGoal(r.Context(), h.Pool, user, date, service.GoalInput{
-		GoalValues: service.GoalValues{
-			Calories: in.Calories, Protein: in.Protein, Carbs: in.Carbs,
-			Fat: in.Fat, Fiber: in.Fiber, Sugar: in.Sugar,
-		},
-		Reason: in.Reason,
-	})
+	g, created, err := service.SetDayGoal(r.Context(), h.Pool, user, date, in.toService())
 	var verr *service.GoalValidationError
 	if errors.As(err, &verr) {
 		if verr.Field == "" {

@@ -211,10 +211,7 @@ func newDayGoalPayload(mu service.MacroUser, dg *service.DayGoal) dayGoalPayload
 		EnabledMacros:   service.GetEnabledMacros(mu),
 		MacroModes:      service.GetMacroModes(mu),
 		GoalThreshold:   mu.GoalThreshold,
-		CaloriesEnabled: true,
-	}
-	if v, ok := mu.MacrosEnabled["calories"]; ok && v == false {
-		p.CaloriesEnabled = false
+		CaloriesEnabled: service.CaloriesEnabled(mu),
 	}
 	if dg.Adjusted && dg.Base != nil {
 		p.BaseCalories = dg.Base.Calories

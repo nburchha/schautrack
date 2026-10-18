@@ -37,10 +37,7 @@ func (h *EntriesHandler) entryDetail(r *http.Request, q querier, entryID, ownerI
 
 // entryDetailPayload is the response shared by the read and the two writes.
 func entryDetailPayload(e *v1Entry, mu service.MacroUser) map[string]any {
-	caloriesEnabled := true
-	if v, ok := mu.MacrosEnabled["calories"]; ok && v == false {
-		caloriesEnabled = false
-	}
+	caloriesEnabled := service.CaloriesEnabled(mu)
 	return map[string]any{
 		"ok":              true,
 		"entry":           e,

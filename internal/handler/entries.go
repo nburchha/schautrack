@@ -192,10 +192,7 @@ func (h *EntriesHandler) Dashboard(w http.ResponseWriter, r *http.Request) {
 
 	dailyStats := buildDailyStats(dayOptions, totalsByDate, dayGoals.ValuesOn, enabledMacros, macroModes, macroTotalsByDate, mu.GoalThreshold)
 
-	caloriesEnabled := true
-	if v, ok := mu.MacrosEnabled["calories"]; ok && v == false {
-		caloriesEnabled = false
-	}
+	caloriesEnabled := service.CaloriesEnabled(mu)
 	autoCalcCalories := service.IsAutoCalcCalories(mu)
 
 	var calorieStatus service.MacroStatus
