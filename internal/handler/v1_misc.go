@@ -23,12 +23,16 @@ import (
 // weight reading is in.
 type v1Me struct {
 	User struct {
-		ID         int     `json:"id"`
-		Email      string  `json:"email"`
-		Timezone   string  `json:"timezone"`
-		WeightUnit string  `json:"weight_unit"`
-		DailyGoal  *int    `json:"daily_goal"`
-		Language   *string `json:"language"`
+		ID         int    `json:"id"`
+		Email      string `json:"email"`
+		Timezone   string `json:"timezone"`
+		WeightUnit string `json:"weight_unit"`
+		DailyGoal  *int   `json:"daily_goal"`
+		// Goals is the raw Basisziel (ADR 0007): calories and all five macros,
+		// whether or not the account currently tracks them. DailyGoal is the
+		// same calorie number, kept for existing clients.
+		Goals    v1GoalValues `json:"goals"`
+		Language *string      `json:"language"`
 	} `json:"user"`
 	Token struct {
 		ID        int        `json:"id"`

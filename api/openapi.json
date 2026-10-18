@@ -2307,7 +2307,7 @@
       "patch": {
         "operationId": "updateMe",
         "summary": "Change account settings",
-        "description": "Only settings that affect how the rest of the API behaves are writable. Authentication settings (password, 2FA, passkeys, email) are deliberately NOT — those are step-up gated in the app, and step-up is meaningless for a bearer token, so allowing them would turn one leaked token into account takeover.",
+        "description": "Only settings that affect how the rest of the API behaves are writable. Authentication settings (password, 2FA, passkeys, email) are deliberately NOT — those are step-up gated in the app, and step-up is meaningless for a bearer token, so allowing them would turn one leaked token into account takeover. Changing the macro `goals` additionally requires `goals:write` (checked on the request body, answered `403` if missing).",
         "tags": [
           "Account"
         ],
@@ -5903,6 +5903,10 @@
                 "type": "string",
                 "description": "Account email."
               },
+              "goals": {
+                "$ref": "#/components/schemas/GoalValues",
+                "description": "The permanent goal (Basisziel), raw: every value that is stored, including macros the account does not currently track. Not the goal of any particular date — use `GET /goals/{date}` for that. Writable via `PATCH /me`; `calories` here is `daily_goal`."
+              },
               "id": {
                 "type": "integer",
                 "description": "Account identifier."
@@ -5933,6 +5937,7 @@
               "timezone",
               "weight_unit",
               "daily_goal",
+              "goals",
               "language"
             ]
           }
@@ -6666,6 +6671,57 @@
             "description": "Daily calorie goal (stored as the app's calorie macro goal). `null` clears it.",
             "minimum": 1,
             "maximum": 9999
+          },
+          "goals": {
+            "type": "object",
+            "description": "Macro goals of the permanent goal (Basisziel). Each key you send is merged into the stored goal; keys you leave out are untouched, and the rest of the goal (including the calorie goal and the limit/target modes) is never replaced. `null` or `0` clears a goal. Calories are set with `daily_goal`. A macro the account does not track is rejected with `422` (clearing it is allowed). Requires the `goals:write` scope in addition to `settings:write`; a token without it gets `403` when this object carries any key, and can still set everything else.",
+            "properties": {
+              "carbs": {
+                "type": [
+                  "integer",
+                  "null"
+                ],
+                "description": "Carbohydrate goal in grams.",
+                "minimum": 0,
+                "maximum": 9999
+              },
+              "fat": {
+                "type": [
+                  "integer",
+                  "null"
+                ],
+                "description": "Fat goal in grams.",
+                "minimum": 0,
+                "maximum": 9999
+              },
+              "fiber": {
+                "type": [
+                  "integer",
+                  "null"
+                ],
+                "description": "Fiber goal in grams.",
+                "minimum": 0,
+                "maximum": 9999
+              },
+              "protein": {
+                "type": [
+                  "integer",
+                  "null"
+                ],
+                "description": "Protein goal in grams.",
+                "minimum": 0,
+                "maximum": 9999
+              },
+              "sugar": {
+                "type": [
+                  "integer",
+                  "null"
+                ],
+                "description": "Sugar goal in grams.",
+                "minimum": 0,
+                "maximum": 9999
+              }
+            }
           },
           "language": {
             "type": [
