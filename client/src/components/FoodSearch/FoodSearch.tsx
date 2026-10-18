@@ -1,12 +1,13 @@
-import { Suspense, useEffect, useRef, useState } from 'react';
+import { Suspense, useEffect, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
 import { searchFoods } from '@/api/foods';
 import type { Food } from '@/types';
-import { MAX_GRAMS, MIN_GRAMS, formatAmount, parseGrams } from '@/lib/components';
+import { DEFAULT_GRAMS, foodPortion, formatAmount, parseGrams } from '@/lib/components';
 import { formatNumber } from '@/lib/format';
 import { Button } from '@/components/ui/Button';
 import { cn } from '@/lib/utils';
+import { GramsInput, InvalidGramsHint } from './GramsInput';
 import { lazyRoute } from '@/lib/lazyRoute';
 
 // Lazy-loaded: the scanner pulls in the quagga2 barcode decoder, which is only
@@ -15,7 +16,6 @@ const BarcodeScanModal = lazyRoute(() => import('@/pages/Dashboard/BarcodeScanMo
 
 const MIN_QUERY = 2;
 const DEBOUNCE_MS = 250;
-const DEFAULT_GRAMS = '100';
 
 const inputClass =
   'h-10 w-full rounded-md border border-input bg-muted/50 px-3 py-2 text-sm text-foreground outline-none transition-colors focus:border-ring focus:ring-1 focus:ring-ring placeholder:text-muted-foreground/50';
@@ -40,13 +40,18 @@ export function FoodSearch({ onPick, pickLabel, autoFocus, barcode }: Props) {
   const [input, setInput] = useState('');
   const [term, setTerm] = useState('');
   const [selected, setSelected] = useState<Food | null>(null);
-  const [grams, setGrams] = useState(DEFAULT_GRAMS);
+  const [grams, setGrams] = useState(String(DEFAULT_GRAMS));
   const [picking, setPicking] = useState(false);
   const [scanOpen, setScanOpen] = useState(false);
   // Once opened the scanner stays mounted so its close-cleanup keeps running;
   // it is not mounted, and its chunk not fetched, before the first open.
-  const scanMounted = useRef(false);
-  if (scanOpen) scanMounted.current = true;
+  const [scanEverOpened, setScanEverOpened] = useState(false);
+  useEffect(() => {
+    if (!barcode) {
+      setScanOpen(false);
+      setScanEverOpened(false);
+    }
+  }, [barcode]);
 
   useEffect(() => {
     const trimmed = input.trim();
@@ -76,7 +81,7 @@ export function FoodSearch({ onPick, pickLabel, autoFocus, barcode }: Props) {
 
   const choose = (food: Food) => {
     setSelected(food);
-    setGrams(DEFAULT_GRAMS);
+    setGrams(String(DEFAULT_GRAMS));
   };
 
   const confirm = async () => {
@@ -95,7 +100,7 @@ export function FoodSearch({ onPick, pickLabel, autoFocus, barcode }: Props) {
   };
 
   if (selected) {
-    const kcal = (selected.calories_per_100g ?? 0) * (parsedGrams ?? 0) / 100;
+    const kcal = parsedGrams == null ? null : foodPortion(selected, parsedGrams).kcal;
     return (
       <div className="flex flex-col gap-3" data-testid="food-search-selected">
         <div className="min-w-0">
@@ -106,33 +111,19 @@ export function FoodSearch({ onPick, pickLabel, autoFocus, barcode }: Props) {
         </div>
 
         <div className="flex items-center gap-2">
-          <label className="flex flex-1 items-center gap-2">
-            <span className="sr-only">{t('foodSearch.gramsLabel', { name: selected.name })}</span>
-            <input
-              className={cn(inputClass, 'tabular-nums', parsedGrams == null && 'border-destructive')}
-              inputMode="decimal"
-              value={grams}
-              onChange={(e) => setGrams(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter') {
-                  e.preventDefault();
-                  void confirm();
-                }
-              }}
-              data-testid="food-search-grams"
-              autoFocus
-            />
-            <span className="text-sm text-muted-foreground">g</span>
-          </label>
+          <GramsInput
+            value={grams}
+            onChange={setGrams}
+            onEnter={() => void confirm()}
+            name={selected.name}
+            testId="food-search-grams"
+            autoFocus
+          />
           <span className="w-24 text-right text-sm tabular-nums text-muted-foreground" data-testid="food-search-kcal">
-            {parsedGrams == null ? '–' : t('foodSearch.portionKcal', { kcal: formatAmount(kcal) })}
+            {kcal == null ? '–' : t('foodSearch.portionKcal', { kcal: formatAmount(kcal) })}
           </span>
         </div>
-        {parsedGrams == null && (
-          <p className="m-0 text-xs text-destructive" role="alert">
-            {t('foodSearch.invalidGrams', { min: MIN_GRAMS, max: formatNumber(MAX_GRAMS) })}
-          </p>
-        )}
+        <InvalidGramsHint value={grams} />
 
         <div className="flex items-center justify-between gap-2">
           <Button type="button" size="sm" variant="ghost" onClick={() => setSelected(null)} disabled={picking}>
@@ -167,7 +158,7 @@ export function FoodSearch({ onPick, pickLabel, autoFocus, barcode }: Props) {
           <button
             type="button"
             className="flex size-10 shrink-0 cursor-pointer items-center justify-center rounded-md border border-input bg-muted/50 text-muted-foreground transition-colors hover:text-foreground"
-            onClick={() => setScanOpen(true)}
+            onClick={() => { setScanEverOpened(true); setScanOpen(true); }}
             aria-label={t('entries.scanBarcodeLabel')}
             title={t('entries.scanBarcodeLabel')}
             data-testid="food-search-scan"
@@ -232,7 +223,7 @@ export function FoodSearch({ onPick, pickLabel, autoFocus, barcode }: Props) {
         </ul>
       )}
 
-      {scanMounted.current && (
+      {barcode && scanEverOpened && (
         <Suspense fallback={null}>
           <BarcodeScanModal
             isOpen={scanOpen}

@@ -5,9 +5,10 @@ import Quagga from '@ericblade/quagga2';
 import { lookupBarcode } from '@/api/barcode';
 import { useAuth } from '@/hooks/useAuth';
 import { MACRO_LABELS, getEnabledMacros } from '@/lib/macros';
-import { MACRO_FIELD, MAX_GRAMS, MIN_GRAMS, parseGrams } from '@/lib/components';
+import { DEFAULT_GRAMS, foodPortion, formatAmount, parseGrams, servingGrams } from '@/lib/components';
 import { formatNumber } from '@/lib/format';
 import { Button } from '@/components/ui/Button';
+import { GramsInput, InvalidGramsHint } from '@/components/FoodSearch/GramsInput';
 import { cn } from '@/lib/utils';
 import type { Food } from '@/types';
 
@@ -30,18 +31,13 @@ type Mode = 'camera' | 'upload' | 'manual';
 interface ProductData {
   food: Food;
   servingSize?: string | null;
-  servingQuantity?: number | null;
+  /** The serving in grams as the grams field accepts it; null when OFF has none or an unusable one. */
+  serving: number | null;
+  /** Open Food Facts was unreachable; these are the values stored by an earlier scan. */
+  cached: boolean;
 }
 
-function scalePortion(food: Food, grams: number, macroKeys: string[]) {
-  const factor = grams / 100;
-  const macros: Record<string, number | null> = {};
-  for (const key of macroKeys) {
-    const per100 = food.macros_per_100g[MACRO_FIELD[key as keyof typeof MACRO_FIELD]];
-    macros[key] = per100 == null ? null : Math.round(per100 * factor * 10) / 10;
-  }
-  return { calories: Math.round((food.calories_per_100g ?? 0) * factor), macros };
-}
+const DEFAULT_GRAMS_TEXT = String(DEFAULT_GRAMS);
 
 export default function BarcodeScanModal({ isOpen, onClose, onPick, pickLabel }: Props) {
   const { t } = useTranslation('dashboard');
@@ -52,7 +48,7 @@ export default function BarcodeScanModal({ isOpen, onClose, onPick, pickLabel }:
   const [barcode, setBarcode] = useState('');
   const [manualCode, setManualCode] = useState('');
   const [product, setProduct] = useState<ProductData | null>(null);
-  const [grams, setGrams] = useState('100');
+  const [grams, setGrams] = useState(DEFAULT_GRAMS_TEXT);
   const [picking, setPicking] = useState(false);
   const [errorMsg, setErrorMsg] = useState('');
   const [cameraAvailable, setCameraAvailable] = useState(true);
@@ -70,6 +66,10 @@ export default function BarcodeScanModal({ isOpen, onClose, onPick, pickLabel }:
   // must shut the camera down instead of starting the scanner.
   const scanSessionRef = useRef(0);
 
+  // Incremented on close, retry and every new lookup so a response that lands
+  // after the modal moved on is dropped instead of written into a reset modal.
+  const lookupGenRef = useRef(0);
+
   const stopScanner = useCallback(() => {
     scanSessionRef.current++;
     // Always detach the detection handler — it is registered before init
@@ -82,6 +82,7 @@ export default function BarcodeScanModal({ isOpen, onClose, onPick, pickLabel }:
   }, []);
 
   const doLookup = useCallback(async (code: string) => {
+    const generation = ++lookupGenRef.current;
     setBarcode(code);
     setPhase('loading');
     setErrorMsg('');
@@ -89,6 +90,7 @@ export default function BarcodeScanModal({ isOpen, onClose, onPick, pickLabel }:
 
     try {
       const res = await lookupBarcode(code);
+      if (generation !== lookupGenRef.current) return;
       if (!res.ok) {
         setErrorMsg(res.error || t('barcodeScan.errorProductNotFound'));
         setPhase('error');
@@ -101,15 +103,12 @@ export default function BarcodeScanModal({ isOpen, onClose, onPick, pickLabel }:
         setPhase('error');
         return;
       }
-      const p: ProductData = {
-        food: res.food,
-        servingSize: res.servingSize,
-        servingQuantity: res.servingQuantity,
-      };
-      setProduct(p);
-      setGrams(String(p.servingQuantity || 100));
+      const serving = servingGrams(res.servingQuantity);
+      setProduct({ food: res.food, servingSize: res.servingSize, serving, cached: !!res.cached });
+      setGrams(String(serving ?? DEFAULT_GRAMS));
       setPhase('result');
     } catch {
+      if (generation !== lookupGenRef.current) return;
       setErrorMsg(t('barcodeScan.errorLookupFailed'));
       setPhase('error');
     }
@@ -177,12 +176,13 @@ export default function BarcodeScanModal({ isOpen, onClose, onPick, pickLabel }:
   useEffect(() => {
     if (!isOpen) {
       stopScanner();
+      lookupGenRef.current++;
       setPhase('scanning');
       setMode('camera');
       setBarcode('');
       setManualCode('');
       setProduct(null);
-      setGrams('100');
+      setGrams(DEFAULT_GRAMS_TEXT);
       setErrorMsg('');
       setCameraAvailable(true);
       setScannerReady(false);
@@ -240,9 +240,9 @@ export default function BarcodeScanModal({ isOpen, onClose, onPick, pickLabel }:
 
   const parsedGrams = parseGrams(grams);
 
-  // Unknown values stay unknown (null): a product without a fiber figure shows
-  // a dash, not "0 g".
-  const scaled = product && parsedGrams != null ? scalePortion(product.food, parsedGrams, enabledMacros) : null;
+  // The same arithmetic as the saved component row. Unknown values stay unknown
+  // (null): a product without a fiber figure shows a dash, not "0 g".
+  const portion = product && parsedGrams != null ? foodPortion(product.food, parsedGrams) : null;
 
   const handlePick = async () => {
     if (!product || parsedGrams == null || picking) return;
@@ -257,11 +257,12 @@ export default function BarcodeScanModal({ isOpen, onClose, onPick, pickLabel }:
   };
 
   const handleRetry = () => {
+    lookupGenRef.current++;
     setPhase('scanning');
     setBarcode('');
     setManualCode('');
     setProduct(null);
-    setGrams('100');
+    setGrams(DEFAULT_GRAMS_TEXT);
     setErrorMsg('');
     lastCodeRef.current = { code: '', count: 0 };
   };
@@ -393,64 +394,50 @@ export default function BarcodeScanModal({ isOpen, onClose, onPick, pickLabel }:
                   </div>
                 </div>
 
+                {product.cached && (
+                  <p className="m-0 text-center text-xs text-muted-foreground" data-testid="barcode-cached-note">{t('barcodeScan.cachedNote')}</p>
+                )}
+
                 {/* Amount selector */}
                 <div className="flex items-center gap-2">
-                  <div className="relative flex-1">
-                    <input
-                      type="text"
-                      inputMode="decimal"
-                      aria-label={t('foodSearch.gramsLabel', { name: product.food.name })}
-                      className={cn(
-                        'w-full rounded-md border border-input bg-muted/50 px-3 py-2 pr-8 text-sm text-foreground outline-none transition-colors focus:border-ring focus:ring-1 focus:ring-ring tabular-nums',
-                        parsedGrams == null && 'border-destructive'
-                      )}
-                      value={grams}
-                      onChange={(e) => setGrams(e.target.value)}
-                      onKeyDown={(e) => {
-                        if (e.key === 'Enter') {
-                          e.preventDefault();
-                          void handlePick();
-                        }
-                      }}
-                      data-testid="barcode-grams"
-                    />
-                    <span className="absolute right-2.5 top-1/2 -translate-y-1/2 text-[10px] text-muted-foreground pointer-events-none">g</span>
-                  </div>
+                  <GramsInput
+                    value={grams}
+                    onChange={setGrams}
+                    onEnter={() => void handlePick()}
+                    name={product.food.name}
+                    testId="barcode-grams"
+                  />
                   <div className="flex gap-1">
-                    {product.servingQuantity && product.servingQuantity !== 100 && (
+                    {product.serving != null && product.serving !== DEFAULT_GRAMS && (
                       <button
                         type="button"
-                        className={`rounded-md px-2.5 py-2 text-xs font-medium transition-colors cursor-pointer border ${parsedGrams === product.servingQuantity ? 'border-primary bg-primary/10 text-primary' : 'border-border bg-transparent text-muted-foreground hover:text-foreground hover:border-primary/50'}`}
-                        onClick={() => handleServingPreset(product.servingQuantity ?? 0)}
+                        className={`rounded-md px-2.5 py-2 text-xs font-medium transition-colors cursor-pointer border ${parsedGrams === product.serving ? 'border-primary bg-primary/10 text-primary' : 'border-border bg-transparent text-muted-foreground hover:text-foreground hover:border-primary/50'}`}
+                        onClick={() => handleServingPreset(product.serving ?? DEFAULT_GRAMS)}
                       >
-                        {product.servingSize || `${product.servingQuantity}g`}
+                        {product.servingSize || `${product.serving}g`}
                       </button>
                     )}
                     <button
                       type="button"
-                      className={`rounded-md px-2.5 py-2 text-xs font-medium transition-colors cursor-pointer border ${parsedGrams === 100 ? 'border-primary bg-primary/10 text-primary' : 'border-border bg-transparent text-muted-foreground hover:text-foreground hover:border-primary/50'}`}
-                      onClick={() => handleServingPreset(100)}
+                      className={`rounded-md px-2.5 py-2 text-xs font-medium transition-colors cursor-pointer border ${parsedGrams === DEFAULT_GRAMS ? 'border-primary bg-primary/10 text-primary' : 'border-border bg-transparent text-muted-foreground hover:text-foreground hover:border-primary/50'}`}
+                      onClick={() => handleServingPreset(DEFAULT_GRAMS)}
                     >
-                      100g
+                      {DEFAULT_GRAMS}g
                     </button>
                   </div>
                 </div>
-                {parsedGrams == null && (
-                  <p className="m-0 text-center text-xs text-destructive" role="alert">
-                    {t('foodSearch.invalidGrams', { min: MIN_GRAMS, max: formatNumber(MAX_GRAMS) })}
-                  </p>
-                )}
+                <InvalidGramsHint value={grams} className="text-center" />
 
                 {/* Computed values. OFF is crowdsourced, so a missing figure shows as a dash. */}
                 <div className="flex flex-col items-center gap-1">
-                  <div className="text-2xl font-bold text-primary tabular-nums" data-testid="barcode-kcal">{scaled ? scaled.calories : '–'} cal</div>
+                  <div className="text-2xl font-bold text-primary tabular-nums" data-testid="barcode-kcal">{portion ? formatAmount(portion.kcal) : '–'} cal</div>
                   <div className="flex gap-4 mt-1">
                     {enabledMacros.map((key) => {
-                      const val = scaled?.macros[key];
-                      const label = MACRO_LABELS[key as keyof typeof MACRO_LABELS];
+                      const val = portion?.macros[key];
+                      const label = MACRO_LABELS[key];
                       return (
                         <div key={key} className="flex flex-col items-center">
-                          <span className="text-sm font-semibold tabular-nums">{val == null ? '–' : `${val}g`}</span>
+                          <span className="text-sm font-semibold tabular-nums">{val == null ? '–' : `${formatAmount(val)}g`}</span>
                           <span className="text-xs uppercase tracking-wider text-muted-foreground">{label?.label || key}</span>
                         </div>
                       );

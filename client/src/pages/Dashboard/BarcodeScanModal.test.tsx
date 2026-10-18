@@ -20,8 +20,17 @@ const skyr: Food = {
 
 function renderModal(onPick = vi.fn().mockResolvedValue(undefined)) {
   const onClose = vi.fn();
-  render(<BarcodeScanModal isOpen onClose={onClose} onPick={onPick} pickLabel="Add" />);
-  return { onPick, onClose };
+  const view = render(<BarcodeScanModal isOpen onClose={onClose} onPick={onPick} pickLabel="Add" />);
+  const setOpen = (isOpen: boolean) =>
+    view.rerender(<BarcodeScanModal isOpen={isOpen} onClose={onClose} onPick={onPick} pickLabel="Add" />);
+  return { onPick, onClose, setOpen };
+}
+
+/** A scan whose product has this serving; the serving button is named "portion". */
+function mockServing(servingQuantity: number | null) {
+  vi.mocked(lookupBarcode).mockResolvedValue({
+    ok: true, name: skyr.name, caloriesPer100g: 63, food: skyr, servingSize: 'portion', servingQuantity,
+  });
 }
 
 async function scan() {
@@ -58,8 +67,8 @@ describe('BarcodeScanModal', () => {
     await scan();
     await screen.findByTestId('barcode-product-name');
 
-    // Protein 11 g/100 g × 150 g, fiber unknown.
-    expect(screen.getByText('16.5g')).toBeInTheDocument();
+    // Protein 11 g/100 g × 150 g = 16.5, shown rounded like the saved component row.
+    expect(screen.getByText('17g')).toBeInTheDocument();
     expect(screen.getByText('–')).toBeInTheDocument();
   });
 
@@ -92,6 +101,108 @@ describe('BarcodeScanModal', () => {
     await scan();
 
     expect(await screen.findByText('No calorie data available for this product.')).toBeInTheDocument();
+    expect(screen.queryByTestId('barcode-pick')).not.toBeInTheDocument();
+  });
+
+  it('drops a lookup that lands after the modal was closed and reopened', async () => {
+    let release: (v: Awaited<ReturnType<typeof lookupBarcode>>) => void = () => {};
+    vi.mocked(lookupBarcode).mockImplementation(() => new Promise((resolve) => { release = resolve; }));
+    const { setOpen } = renderModal();
+    await scan();
+    await screen.findByText(/Looking up/);
+
+    setOpen(false);
+    setOpen(true);
+    release({ ok: true, name: skyr.name, caloriesPer100g: 63, food: skyr, servingSize: '150 g', servingQuantity: 150 });
+    await new Promise((r) => setTimeout(r, 20));
+
+    expect(screen.queryByTestId('barcode-product-name')).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Manual' })).toBeInTheDocument();
+  });
+
+  it('drops a failing lookup that lands after the modal was closed', async () => {
+    let fail: (e: Error) => void = () => {};
+    vi.mocked(lookupBarcode).mockImplementation(() => new Promise((_, reject) => { fail = reject; }));
+    const { setOpen } = renderModal();
+    await scan();
+    await screen.findByText(/Looking up/);
+
+    setOpen(false);
+    setOpen(true);
+    fail(new Error('late'));
+    await new Promise((r) => setTimeout(r, 20));
+
+    expect(screen.queryByText('Lookup failed. Please try again.')).not.toBeInTheDocument();
+  });
+
+  describe('starting grams', () => {
+    it.each([
+      ['a serving under the smallest amount', 0.005],
+      ['a serving over the largest amount', 25000],
+      ['no serving', null],
+    ])('falls back to 100 g for %s', async (_name, servingQuantity) => {
+      mockServing(servingQuantity);
+      renderModal();
+      await scan();
+
+      expect(await screen.findByTestId('barcode-grams')).toHaveValue('100');
+      expect(screen.getByTestId('barcode-pick')).toBeEnabled();
+      // Only the 100 g button: an unusable serving is not offered as a preset.
+      expect(screen.queryByRole('button', { name: 'portion' })).not.toBeInTheDocument();
+      expect(screen.getByRole('button', { name: '100g' })).toHaveClass('border-primary');
+    });
+
+    it('rounds a long serving to hundredths and highlights its button by that value', async () => {
+      mockServing(33.333333);
+      const { onPick } = renderModal();
+      await scan();
+
+      expect(await screen.findByTestId('barcode-grams')).toHaveValue('33.33');
+      expect(screen.getByRole('button', { name: 'portion' })).toHaveClass('border-primary');
+      expect(screen.getByRole('button', { name: '100g' })).not.toHaveClass('border-primary');
+
+      await userEvent.click(screen.getByTestId('barcode-pick'));
+      expect(onPick).toHaveBeenCalledWith(skyr, 33.33);
+    });
+
+    it('switches between the serving and 100 g', async () => {
+      renderModal();
+      await scan();
+      expect(await screen.findByTestId('barcode-grams')).toHaveValue('150');
+
+      await userEvent.click(screen.getByRole('button', { name: '100g' }));
+      expect(screen.getByTestId('barcode-grams')).toHaveValue('100');
+      await userEvent.click(screen.getByRole('button', { name: '150 g' }));
+      expect(screen.getByTestId('barcode-grams')).toHaveValue('150');
+    });
+  });
+
+  it('says so when the product comes from the catalog because Open Food Facts is down', async () => {
+    vi.mocked(lookupBarcode).mockResolvedValue({
+      ok: true, name: skyr.name, caloriesPer100g: 63, food: skyr, servingSize: null, servingQuantity: null,
+      cached: true, note: 'Open Food Facts is unreachable; showing the stored values.',
+    });
+    renderModal();
+    await scan();
+
+    expect(await screen.findByTestId('barcode-cached-note')).toHaveTextContent('Open Food Facts is unreachable; showing the stored values.');
+    expect(screen.getByTestId('barcode-pick')).toBeEnabled();
+  });
+
+  it('shows no note for a live lookup', async () => {
+    renderModal();
+    await scan();
+    await screen.findByTestId('barcode-product-name');
+    expect(screen.queryByTestId('barcode-cached-note')).not.toBeInTheDocument();
+  });
+
+  it('shows the server\'s reason when the calorie value is implausible', async () => {
+    const note = 'Open Food Facts reports an implausible calorie value (5000 kcal per 100 g); it was not stored.';
+    vi.mocked(lookupBarcode).mockResolvedValue({ ok: true, name: 'Odd', caloriesPer100g: null, note });
+    renderModal();
+    await scan();
+
+    expect(await screen.findByText(note)).toBeInTheDocument();
     expect(screen.queryByTestId('barcode-pick')).not.toBeInTheDocument();
   });
 });

@@ -25,6 +25,7 @@
     "enterBarcodePlaceholder": "Wpisz numer kodu kreskowego",
     "lookUpButton": "Wyszukaj",
     "lookingUpText": "Wyszukiwanie {{barcode}}...",
+    "cachedNote": "Open Food Facts jest niedostępny; wyświetlane są zapisane wartości.",
     "calPer100g": "{{value}} cal na 100g",
     "servingSizeSuffix": " · porcja: {{size}}",
     "scanAnotherButton": "Skanuj kolejny",

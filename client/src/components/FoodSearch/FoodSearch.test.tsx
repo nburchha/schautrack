@@ -174,6 +174,26 @@ describe('FoodSearch', () => {
     await waitFor(() => expect(screen.queryByTestId('mock-scanner')).not.toBeInTheDocument());
   });
 
+  it('unmounts the scanner when barcode lookup is switched off', async () => {
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    const tree = (barcode: boolean) => (
+      <QueryClientProvider client={client}>
+        <FoodSearch onPick={vi.fn()} pickLabel="Add" barcode={barcode} />
+      </QueryClientProvider>
+    );
+    const { rerender } = render(tree(true));
+    await userEvent.click(screen.getByTestId('food-search-scan'));
+    expect(await screen.findByTestId('mock-scanner')).toBeInTheDocument();
+
+    rerender(tree(false));
+    expect(screen.queryByTestId('mock-scanner')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('food-search-scan')).not.toBeInTheDocument();
+
+    // Switching it back on does not reopen a scanner nobody asked for.
+    rerender(tree(true));
+    expect(screen.queryByTestId('mock-scanner')).not.toBeInTheDocument();
+  });
+
   it('keeps the scanner open when the pick fails', async () => {
     const failing = vi.fn().mockRejectedValue(new Error('boom'));
     renderSearch(failing, true);

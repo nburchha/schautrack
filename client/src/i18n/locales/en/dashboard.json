@@ -19,6 +19,7 @@
   "barcodeScan": {
     "attributionLinkText": "Open Food Facts",
     "attributionPrefix": "Barcode data is sent to and provided by",
+    "cachedNote": "Open Food Facts is unreachable; showing the stored values.",
     "calPer100g": "{{value}} cal per 100g",
     "cameraNotAvailable": "Camera not available.",
     "enterBarcodePlaceholder": "Enter barcode number",

@@ -25,6 +25,7 @@
     "enterBarcodePlaceholder": "Voer barcodenummer in",
     "lookUpButton": "Opzoeken",
     "lookingUpText": "{{barcode}} wordt opgezocht...",
+    "cachedNote": "Open Food Facts is niet bereikbaar; de opgeslagen waarden worden getoond.",
     "calPer100g": "{{value}} cal per 100 g",
     "servingSizeSuffix": " · portie: {{size}}",
     "scanAnotherButton": "Nog een scannen",
