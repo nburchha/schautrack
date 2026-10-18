@@ -11,6 +11,7 @@ import { SectionLabel } from '@/components/ui/SectionLabel';
 import { Sheet } from '@/components/ui/Sheet';
 import { Fab } from '@/components/ui/Fab';
 import TodayPanel from './TodayPanel';
+import AdjustmentSheet from './AdjustmentSheet';
 import EntryForm from './EntryForm';
 import SavedFoodsRow from './SavedFoodsRow';
 import Timeline from './Timeline';
@@ -27,6 +28,7 @@ export default function Dashboard() {
   const dateInputRef = useRef<HTMLInputElement>(null);
   const { selectedDate, currentUserId, currentLabel, canEdit, rangePreset, rangeStart, rangeEnd, selectUser, selectDay } = useDashboardStore();
   const [addOpen, setAddOpen] = useState(false);
+  const [goalOpen, setGoalOpen] = useState(false);
 
   // Fetch dashboard data
   const { data: dashboard, isLoading, isError, error, isFetching, refetch } = useQuery({
@@ -149,6 +151,17 @@ export default function Dashboard() {
           goal={dayData.goal}
           eatenCalories={selectedTotal}
           macroTotals={selectedMacroTotals}
+          onEdit={canEdit ? () => setGoalOpen(true) : undefined}
+        />
+      )}
+
+      {/* Own account only: a linked account's goals are read-only. */}
+      {canEdit && dayData?.goal && (
+        <AdjustmentSheet
+          open={goalOpen}
+          onClose={() => setGoalOpen(false)}
+          goal={dayData.goal}
+          autoCalcCalories={dashboard.autoCalcCalories}
         />
       )}
 

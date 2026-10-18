@@ -140,6 +140,22 @@
       "own": "Własny"
     }
   },
+  "goalAdjust": {
+    "caloriesAuto": "Obliczone z Twoich makroskładników",
+    "caloriesLabel": "Kalorie (kcal)",
+    "cancel": "Anuluj",
+    "kcal": "{{amount}} kcal",
+    "macroLabel": "{{macro}} (g)",
+    "noReason": "Bez powodu",
+    "reasonLabel": "Powód (opcjonalnie)",
+    "reasonPlaceholder": "np. Długi bieg",
+    "recentTitle": "Ostatnie korekty",
+    "reset": "Przywróć cel podstawowy",
+    "resetFailed": "Nie udało się przywrócić celu.",
+    "save": "Zapisz",
+    "saveFailed": "Nie udało się zapisać celu.",
+    "title": "Dostosuj cel na ten dzień"
+  },
   "meal": {
     "addPage": {
       "back": "Wróć do posiłku",

@@ -134,6 +134,22 @@
       "own": "Own"
     }
   },
+  "goalAdjust": {
+    "caloriesAuto": "Calculated from your macros",
+    "caloriesLabel": "Calories (kcal)",
+    "cancel": "Cancel",
+    "kcal": "{{amount}} kcal",
+    "macroLabel": "{{macro}} (g)",
+    "noReason": "No reason",
+    "reasonLabel": "Reason (optional)",
+    "reasonPlaceholder": "e.g. Long run",
+    "recentTitle": "Recent adjustments",
+    "reset": "Reset to base goal",
+    "resetFailed": "Could not reset the goal.",
+    "save": "Save",
+    "saveFailed": "Could not save the goal.",
+    "title": "Adjust goal for this day"
+  },
   "meal": {
     "addPage": {
       "add": "Add",
