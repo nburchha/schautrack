@@ -56,13 +56,19 @@ export default function Dashboard() {
   const showCat = (cat: 'nutrition' | 'weight' | 'todos' | 'notes') =>
     canEdit || !!activeView?.shares?.[cat];
 
+  // Switching DAY keeps the previous day on screen while the next loads (no
+  // flicker), but switching ACCOUNT must not: it would show one account's goal
+  // and entries under another's name. Both keys are [name, userId, date].
+  const keepSameUser = <T,>(prev: T | undefined, prevQuery?: { queryKey: readonly unknown[] }) =>
+    prevQuery?.queryKey[1] === effectiveUserId ? prev : undefined;
+
   // Fetch entries for selected day
-  const { data: dayData } = useQuery({
+  const { data: dayData, isPending: dayPending, isPlaceholderData: dayIsPlaceholder } = useQuery({
     queryKey: ['day-entries', effectiveUserId, selectedDate],
     // eslint-disable-next-line @typescript-eslint/no-non-null-assertion -- `enabled` below gates this queryFn on effectiveUserId being set
     queryFn: () => getDayEntries(effectiveUserId!, selectedDate),
     enabled: !!effectiveUserId && !!selectedDate,
-    placeholderData: keepPreviousData,
+    placeholderData: keepSameUser,
   });
 
   // Fetch weight for selected day
@@ -70,7 +76,7 @@ export default function Dashboard() {
     queryKey: ['weight', effectiveUserId, selectedDate],
     queryFn: () => getWeightDay(selectedDate, effectiveUserId),
     enabled: !!effectiveUserId && !!selectedDate,
-    placeholderData: keepPreviousData,
+    placeholderData: keepSameUser,
   });
 
   // Totals of the selected day come from the same response as its goal, so the
@@ -91,6 +97,9 @@ export default function Dashboard() {
     }
     return totals;
   }, [dayData?.entries]);
+
+  // Placeholder data from a neighbouring day is never presented as this day's goal.
+  const dayGoal = dayData?.goal?.date === selectedDate ? dayData.goal : undefined;
 
   if (isError && !dashboard) {
     return <QueryError error={error} onRetry={() => refetch()} retrying={isFetching} />;
@@ -146,21 +155,27 @@ export default function Dashboard() {
         </div>
       </header>
 
-      {showCat('nutrition') && dayData?.goal && (
+      {/* The panel only ever shows the goal OF the selected day. While the next
+          day (or account) is still loading, a same-height skeleton holds the
+          space so the page below does not jump. */}
+      {showCat('nutrition') && dayGoal && (
         <TodayPanel
-          goal={dayData.goal}
+          goal={dayGoal}
           eatenCalories={selectedTotal}
           macroTotals={selectedMacroTotals}
           onEdit={canEdit ? () => setGoalOpen(true) : undefined}
         />
       )}
+      {showCat('nutrition') && !dayGoal && (dayPending || dayIsPlaceholder) && (
+        <div data-testid="today-panel-skeleton" aria-hidden="true" className="surface min-h-48 animate-pulse" />
+      )}
 
       {/* Own account only: a linked account's goals are read-only. */}
-      {canEdit && dayData?.goal && (
+      {canEdit && dayGoal && (
         <AdjustmentSheet
           open={goalOpen}
           onClose={() => setGoalOpen(false)}
-          goal={dayData.goal}
+          goal={dayGoal}
           autoCalcCalories={dashboard.autoCalcCalories}
         />
       )}
