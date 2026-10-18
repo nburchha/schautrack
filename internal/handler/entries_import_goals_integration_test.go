@@ -23,8 +23,6 @@ type adjRow struct {
 	Reason                                      *string
 }
 
-func strp(s string) *string { return &s }
-
 func (e *v1Env) exportImportHandler() *EntriesHandler {
 	return &EntriesHandler{Pool: e.Pool, Broker: sse.NewBroker(e.Pool)}
 }
@@ -118,10 +116,10 @@ func requireAdjustments(t *testing.T, got, want []adjRow) {
 }
 
 var seedAdjustments = []adjRow{
-	{Date: "2026-05-01", Calories: intp(3100), Protein: intp(150), Carbs: intp(480), Fat: intp(67), Fiber: intp(35), Sugar: intp(50), Reason: strp("Lauf 25 km")},
-	{Date: "2026-05-02", Calories: intp(2400), Carbs: intp(300)},                           // partial: other goals unset
-	{Date: "2026-05-03", Calories: intp(2000), Reason: strp("Ärger mit \"Quotes\" und ü")}, // unicode and quoting
-	{Date: "2026-05-04", Reason: strp("nur Grund")},                                        // reason only
+	{Date: "2026-05-01", Calories: ptr(3100), Protein: ptr(150), Carbs: ptr(480), Fat: ptr(67), Fiber: ptr(35), Sugar: ptr(50), Reason: ptr("Lauf 25 km")},
+	{Date: "2026-05-02", Calories: ptr(2400), Carbs: ptr(300)},                           // partial: other goals unset
+	{Date: "2026-05-03", Calories: ptr(2000), Reason: ptr("Ärger mit \"Quotes\" und ü")}, // unicode and quoting
+	{Date: "2026-05-04", Reason: ptr("nur Grund")},                                       // reason only
 }
 
 func TestExportImportRoundTripsGoalAdjustments(t *testing.T) {
@@ -176,7 +174,7 @@ func TestImportStoresAdjustmentsVerbatim(t *testing.T) {
 	if code != http.StatusOK {
 		t.Fatalf("status = %d", code)
 	}
-	requireAdjustments(t, e.adjustments(), []adjRow{{Date: "2026-06-01", Carbs: intp(400)}})
+	requireAdjustments(t, e.adjustments(), []adjRow{{Date: "2026-06-01", Carbs: ptr(400)}})
 }
 
 func TestImportAdjustmentsOnlyFileSucceedsAndKeepsEntries(t *testing.T) {
@@ -219,7 +217,7 @@ func TestImportReplacesAdjustmentsOnlyWhenFileCarriesAny(t *testing.T) {
 	if code != http.StatusOK {
 		t.Fatalf("replacing import = %d", code)
 	}
-	requireAdjustments(t, e.adjustments(), []adjRow{{Date: "2026-07-01", Calories: intp(2800)}})
+	requireAdjustments(t, e.adjustments(), []adjRow{{Date: "2026-07-01", Calories: ptr(2800)}})
 }
 
 func TestImportDoesNotTouchAnotherUsersAdjustments(t *testing.T) {
@@ -239,7 +237,7 @@ func TestImportDoesNotTouchAnotherUsersAdjustments(t *testing.T) {
 
 func TestImportDryRunMatchesRealImportForAdjustments(t *testing.T) {
 	e := newV1Env(t)
-	e.insertAdjustments(adjRow{Date: "2026-01-01", Calories: intp(1111)})
+	e.insertAdjustments(adjRow{Date: "2026-01-01", Calories: ptr(1111)})
 	file := `{"goal_adjustments":[
 		{"date":"2026-05-01","calories":3000,"reason":"ok"},
 		{"date":"2026-05-02","calories":-1},
@@ -250,7 +248,7 @@ func TestImportDryRunMatchesRealImportForAdjustments(t *testing.T) {
 	if code != http.StatusOK || !dry.DryRun {
 		t.Fatalf("dry run = %d %+v", code, dry)
 	}
-	requireAdjustments(t, e.adjustments(), []adjRow{{Date: "2026-01-01", Calories: intp(1111)}}) // nothing written
+	requireAdjustments(t, e.adjustments(), []adjRow{{Date: "2026-01-01", Calories: ptr(1111)}}) // nothing written
 
 	code, real := e.runImport(file, false)
 	if code != http.StatusOK || real.DryRun {
@@ -271,7 +269,7 @@ func TestImportDryRunMatchesRealImportForAdjustments(t *testing.T) {
 	if strings.Join(reasons, ",") != "invalid_value,duplicate_date" {
 		t.Errorf("adjustment skip reasons = %v", reasons)
 	}
-	requireAdjustments(t, e.adjustments(), []adjRow{{Date: "2026-05-01", Calories: intp(3000), Reason: strp("ok")}})
+	requireAdjustments(t, e.adjustments(), []adjRow{{Date: "2026-05-01", Calories: ptr(3000), Reason: ptr("ok")}})
 }
 
 func TestExportWithoutAdjustmentsEmitsAnEmptyArray(t *testing.T) {

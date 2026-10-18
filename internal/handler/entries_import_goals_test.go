@@ -34,9 +34,9 @@ func TestParseImportDataGoalAdjustments(t *testing.T) {
 					t.Errorf("date = %q", g.date)
 				}
 				for name, pair := range map[string][2]*int{
-					"calories": {g.goal.Calories, intp(3100)}, "protein": {g.goal.Protein, intp(150)},
-					"carbs": {g.goal.Carbs, intp(480)}, "fat": {g.goal.Fat, intp(67)},
-					"fiber": {g.goal.Fiber, intp(35)}, "sugar": {g.goal.Sugar, intp(50)},
+					"calories": {g.goal.Calories, ptr(3100)}, "protein": {g.goal.Protein, ptr(150)},
+					"carbs": {g.goal.Carbs, ptr(480)}, "fat": {g.goal.Fat, ptr(67)},
+					"fiber": {g.goal.Fiber, ptr(35)}, "sugar": {g.goal.Sugar, ptr(50)},
 				} {
 					if !eqIntPtr(pair[0], pair[1]) {
 						t.Errorf("%s = %v, want %d", name, pair[0], *pair[1])
@@ -53,7 +53,7 @@ func TestParseImportDataGoalAdjustments(t *testing.T) {
 			wantKept: 1,
 			check: func(t *testing.T, a []importAdjustment) {
 				g := a[0].goal
-				if !eqIntPtr(g.Calories, intp(2500)) || g.Protein != nil || g.Carbs != nil || a[0].reason != nil {
+				if !eqIntPtr(g.Calories, ptr(2500)) || g.Protein != nil || g.Carbs != nil || a[0].reason != nil {
 					t.Errorf("unexpected row: %+v reason=%v", g, a[0].reason)
 				}
 			},
@@ -138,7 +138,7 @@ func TestParseImportDataGoalAdjustments(t *testing.T) {
 			wantSkipped: 1,
 			wantReasons: []string{"duplicate_date"},
 			check: func(t *testing.T, a []importAdjustment) {
-				if !eqIntPtr(a[0].goal.Calories, intp(2000)) {
+				if !eqIntPtr(a[0].goal.Calories, ptr(2000)) {
 					t.Errorf("calories = %v, want the first row's 2000", a[0].goal.Calories)
 				}
 			},
