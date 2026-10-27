@@ -1394,7 +1394,19 @@ func paths() map[string]*PathItem {
 			}, errs(nil)),
 		}},
 
-		"/foods/{id}": {Delete: &Operation{
+		"/foods/{id}": {Get: &Operation{
+			OperationID: "getFood", Summary: "Fetch one food",
+			Description: "A food of the shared catalog or one of your own, with its source and the " +
+				"source's own classification. Other accounts' foods answer 404. Entry components only " +
+				"carry `food_id`; this is how to read the food behind one.",
+			Tags: []string{"Foods"}, Scope: service.ScopeFoodsRead,
+			Security:   []SecurityRequirement{{"bearerAuth": {service.ScopeFoodsRead}}},
+			Parameters: []Parameter{idParam},
+			Responses: merge(map[string]*Response{
+				"200": ok200("The food.", ref("Food")),
+				"400": respRef("BadRequest"), "404": respRef("NotFound"),
+			}, errs(nil)),
+		}, Delete: &Operation{
 			OperationID: "deleteFood", Summary: "Delete a food of your own",
 			Description: "Removes a food created with `POST /foods`. Shared catalog foods and " +
 				"other accounts' foods answer 404. Entries that used the food keep their " +
