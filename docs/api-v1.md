@@ -179,6 +179,7 @@ than retrying blindly.
 | [`POST /saved-foods/{id}/track`](#tracksavedfood) | `entries:write` | Log a saved food as an entry |
 | [`POST /foods`](#createfood) | `foods:write` | Create a food of your own |
 | [`GET /foods/search`](#searchfoods) | `foods:read` | Search the food catalog |
+| [`GET /foods/{id}`](#getfood) | `foods:read` | Fetch one food |
 | [`DELETE /foods/{id}`](#deletefood) | `foods:write` | Delete a food of your own |
 | [`GET /notes/{date}`](#getnote) | `notes:read` | Fetch a day's note |
 | [`PUT /notes/{date}`](#putnote) | `notes:write` | Write a day's note |
@@ -1009,6 +1010,30 @@ Searches the shared catalog and your own foods by name. Typos still match. Exact
 | `401` | [`Problem`](#problem) — No token, or the token is unknown, revoked, or expired. |
 | `403` | [`Problem`](#problem) — The token is valid but lacks the scope this endpoint requires. The `required_scope` field names it. |
 | `422` | [`Problem`](#problem) — The request is well-formed but its values are rejected. `invalid_params` lists the offending fields. |
+| `429` | [`Problem`](#problem) — Too many requests. The `Retry-After` header gives the number of seconds until the window reopens. |
+| `500` | [`Problem`](#problem) — An unexpected server-side failure. |
+
+### Fetch one food
+
+```http
+GET /api/v1/foods/{id}
+```
+
+**Scope:** `foods:read`
+
+A food of the shared catalog or one of your own, with its source and the source's own classification. Other accounts' foods answer 404. Entry components only carry `food_id`; this is how to read the food behind one.
+
+| Parameter | In | Required | Description |
+| --- | --- | --- | --- |
+| `id` | path | yes | The resource's identifier. |
+
+| Status | Response |
+| --- | --- |
+| `200` | [`Food`](#food) — The food. |
+| `400` | [`Problem`](#problem) — The request is malformed — unparseable JSON, an unknown field, or a bad query parameter. |
+| `401` | [`Problem`](#problem) — No token, or the token is unknown, revoked, or expired. |
+| `403` | [`Problem`](#problem) — The token is valid but lacks the scope this endpoint requires. The `required_scope` field names it. |
+| `404` | [`Problem`](#problem) — No such resource, or it belongs to another account. |
 | `429` | [`Problem`](#problem) — Too many requests. The `Retry-After` header gives the number of seconds until the window reopens. |
 | `500` | [`Problem`](#problem) — An unexpected server-side failure. |
 

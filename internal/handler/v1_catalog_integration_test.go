@@ -164,6 +164,52 @@ func TestV1CreateOwnFoodIsPrivateAndSearchable(t *testing.T) {
 	requireProblem(t, dup, http.StatusConflict)
 }
 
+// A component carries only food_id and the values it captured. This route is how a client
+// reads the food's source and classification, which the component does not.
+func TestV1GetFood(t *testing.T) {
+	e := newV1Env(t)
+	token := e.token(service.ScopeFoodsRead)
+	tag := fmt.Sprintf("gf%d", time.Now().UnixNano()%1_000_000_000)
+
+	var shared int
+	if err := e.Pool.QueryRow(e.Ctx, `
+		INSERT INTO foods (source, source_code, source_classification, name, kcal_100g, protein_100g)
+		VALUES ('bls', $1, 'M', $2, 63, 11) RETURNING id`, tag, tag+" Skyr").Scan(&shared); err != nil {
+		t.Fatal(err)
+	}
+	own := e.seedOwnFood(tag+" Brot", 250, nil)
+
+	var got v1Food
+	decodeJSON(t, e.get(fmt.Sprintf("/api/v1/foods/%d", shared), token), &got)
+	if got.ID != shared || got.Source != "bls" || got.SourceCode == nil || *got.SourceCode != tag ||
+		got.SourceClassification == nil || *got.SourceClassification != "M" ||
+		got.Calories == nil || *got.Calories != 63 || got.Macros.ProteinG == nil || *got.Macros.ProteinG != 11 {
+		t.Errorf("shared food = %+v", got)
+	}
+
+	var mine v1Food
+	decodeJSON(t, e.get(fmt.Sprintf("/api/v1/foods/%d", own), token), &mine)
+	if mine.Source != "own" || mine.SourceCode != nil || mine.Calories == nil || *mine.Calories != 250 {
+		t.Errorf("own food = %+v", mine)
+	}
+}
+
+func TestV1GetFoodHidesOtherAccountsFoods(t *testing.T) {
+	e := newV1Env(t)
+	token := e.token(service.ScopeFoodsRead)
+	otherID, _ := e.seedUser("other")
+	var foreign int
+	if err := e.Pool.QueryRow(e.Ctx, `
+		INSERT INTO foods (user_id, source, name, kcal_100g) VALUES ($1, 'own', $2, 100) RETURNING id`,
+		otherID, fmt.Sprintf("gx%d foreign", time.Now().UnixNano())).Scan(&foreign); err != nil {
+		t.Fatal(err)
+	}
+
+	requireProblem(t, e.get(fmt.Sprintf("/api/v1/foods/%d", foreign), token), http.StatusNotFound)
+	requireProblem(t, e.get("/api/v1/foods/2147483647", token), http.StatusNotFound)
+	requireProblem(t, e.get("/api/v1/foods/abc", token), http.StatusBadRequest)
+}
+
 func TestV1DeleteOwnFood(t *testing.T) {
 	e := newV1Env(t)
 	token := e.token(service.ScopeFoodsWrite, service.ScopeFoodsRead, service.ScopeEntriesWrite, service.ScopeEntriesRead)
@@ -247,6 +293,9 @@ func TestV1FoodsRequireScopes(t *testing.T) {
 	}
 	if rec := e.post("/api/v1/foods", e.token(service.ScopeFoodsRead), `{"name":"x food","calories_per_100g":1}`); rec.Code != http.StatusForbidden {
 		t.Errorf("create without foods:write: status = %d, want 403", rec.Code)
+	}
+	if rec := e.get("/api/v1/foods/1", e.token(service.ScopeEntriesRead)); rec.Code != http.StatusForbidden {
+		t.Errorf("get without foods:read: status = %d, want 403", rec.Code)
 	}
 	if rec := e.do(call{Method: http.MethodDelete, Path: "/api/v1/foods/1", Token: e.token(service.ScopeFoodsRead)}); rec.Code != http.StatusForbidden {
 		t.Errorf("delete without foods:write: status = %d, want 403", rec.Code)

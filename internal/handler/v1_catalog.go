@@ -216,6 +216,31 @@ func (h *V1Handler) CreateFoodV1(w http.ResponseWriter, r *http.Request) {
 	writeV1(w, http.StatusCreated, f)
 }
 
+// GetFoodV1 handles GET /api/v1/foods/{id}: one food of the shared catalog or
+// the caller's own. A component only carries food_id and its captured values,
+// so this is how a client reads the food's source and classification. Other
+// accounts' foods answer 404, like the search they stay out of.
+func (h *V1Handler) GetFoodV1(w http.ResponseWriter, r *http.Request) {
+	id, prob := pathID(r)
+	if prob != nil {
+		apierr.Write(w, r, prob)
+		return
+	}
+	f, err := scanFood(h.Pool.QueryRow(r.Context(), `
+		SELECT `+foodSelect+`
+		FROM foods
+		WHERE id = $1 AND (user_id IS NULL OR user_id = $2)`, id, v1User(r).ID))
+	if errors.Is(err, pgx.ErrNoRows) {
+		apierr.Write(w, r, apierr.NotFound("No food with that id."))
+		return
+	}
+	if err != nil {
+		apierr.Write(w, r, dbFail("get food", err))
+		return
+	}
+	writeV1(w, http.StatusOK, f)
+}
+
 // DeleteFoodV1 handles DELETE /api/v1/foods/{id}: remove a food of the caller's
 // own. Shared catalog foods (bls, off) and other accounts' foods answer 404, so
 // the route cannot probe for ids. Entry components that used the food keep
